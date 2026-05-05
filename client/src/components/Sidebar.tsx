@@ -14,8 +14,10 @@ import {
   ChevronRight,
   Wifi,
   WifiOff,
+  LogOut,
 } from 'lucide-react';
 import { mockMaster, mockSlaves, mockAlerts } from '@/lib/mockData';
+import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: Activity },
@@ -26,11 +28,17 @@ const navItems = [
 ];
 
 export default function Sidebar() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
+  const { user, logout } = useAuth();
 
   const activeSlaves = mockSlaves.filter(s => s.status === 'active').length;
   const offlineSlaves = mockSlaves.filter(s => s.status === 'offline').length;
   const unresolvedAlerts = mockAlerts.filter(a => !a.resolved).length;
+
+  const handleLogout = () => {
+    logout();
+    setLocation('/login');
+  };
 
   return (
     <aside
@@ -173,18 +181,34 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* Footer */}
+      {/* Footer / User Profile */}
       <div
-        className="px-4 py-3 text-xs"
+        className="px-4 py-3"
         style={{
           borderTop: '1px solid var(--ev-border-subtle)',
-          color: 'var(--ev-text-muted)',
-          fontFamily: 'IBM Plex Mono, monospace',
+          backgroundColor: 'var(--ev-bg-card)',
         }}
       >
-        <div>eVOLVER v2.4.1</div>
-        <div style={{ color: 'var(--ev-text-muted)', fontSize: '0.65rem' }}>
-          © 2024 Lab Systems
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex flex-col overflow-hidden">
+            <span className="text-sm font-semibold truncate" style={{ color: 'var(--ev-text-primary)' }}>
+              {user?.name || 'Pesquisador'}
+            </span>
+            <span className="text-xs truncate" style={{ color: 'var(--ev-text-muted)' }}>
+              {user?.email || 'user@evolver'}
+            </span>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="p-1.5 rounded hover:bg-red-500/10 transition-colors"
+            title="Sair"
+          >
+            <LogOut size={16} style={{ color: 'var(--ev-danger)' }} />
+          </button>
+        </div>
+        <div className="text-[0.65rem] flex justify-between mt-2 pt-2 border-t" style={{ borderColor: 'var(--ev-border-subtle)', color: 'var(--ev-text-muted)', fontFamily: 'IBM Plex Mono, monospace' }}>
+          <span>eVOLVER v2.4.1</span>
+          <span>© 2026 Lab Systems</span>
         </div>
       </div>
     </aside>
