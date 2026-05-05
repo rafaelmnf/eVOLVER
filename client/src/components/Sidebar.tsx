@@ -21,7 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: Activity },
-  { path: '/experimento/exp-001', label: 'Experiments', icon: FlaskConical },
+  { path: '/experimentos', label: 'Experiments', icon: FlaskConical },
   { path: '/dispositivos', label: 'Devices', icon: Cpu },
   { path: '/alertas', label: 'Alerts', icon: Bell },
   { path: '/configuracoes', label: 'Settings', icon: Settings },
@@ -102,7 +102,7 @@ export default function Sidebar() {
         <div className="ev-label px-3 mb-3">Navigation</div>
         <ul className="space-y-1">
           {navItems.map(({ path, label, icon: Icon }) => {
-            const isActive = location === path || (path !== '/dashboard' && location.startsWith(path));
+            const isActive = location === path || (path === '/experimentos' && location.startsWith('/experimento')) || (path !== '/dashboard' && location.startsWith(path));
             const isAlerts = path === '/alertas';
             return (
               <li key={path}>

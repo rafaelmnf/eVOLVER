@@ -10,6 +10,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Dashboard from "./pages/Dashboard";
+import Experiments from "./pages/Experiments";
 import Experiment from "./pages/Experiment";
 import Devices from "./pages/Devices";
 import Alerts from "./pages/Alerts";
@@ -41,6 +42,7 @@ function Router() {
       
       {/* Protected Routes */}
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
+      <Route path="/experimentos"><ProtectedRoute component={Experiments} /></Route>
       <Route path="/experimento/:id"><ProtectedRoute component={Experiment} /></Route>
       <Route path="/dispositivos"><ProtectedRoute component={Devices} /></Route>
       <Route path="/alertas"><ProtectedRoute component={Alerts} /></Route>

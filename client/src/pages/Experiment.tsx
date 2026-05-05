@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { useParams } from 'wouter';
 import DashboardLayout from '@/components/DashboardLayout';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   mockExperiments,
   mockAlerts,
@@ -49,6 +50,7 @@ const sensorConfig: Record<SensorTab, { label: string; unit: string; color: stri
 
 export default function Experiment() {
   const params = useParams<{ id: string }>();
+  const { user } = useAuth();
   const expId = params.id ?? 'exp-001';
   const experiment = mockExperiments.find(e => e.id === expId) ?? mockExperiments[0];
   const expAlerts = mockAlerts.filter(a => a.experimentId === expId);
@@ -61,6 +63,31 @@ export default function Experiment() {
   );
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
+  const [researchers, setResearchers] = useState(experiment.researchers);
+
+  const isUserInProject = researchers.some(r => r.id === user?.id || r.email === user?.email);
+
+  const handleJoinProject = () => {
+    if (!user) return;
+    const newResearcher = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: 'collaborator' as const,
+      avatar: user.name.substring(0, 2).toUpperCase()
+    };
+    experiment.researchers.push(newResearcher);
+    setResearchers([...experiment.researchers]);
+  };
+
+  const handleLeaveProject = () => {
+    if (!user) return;
+    const index = experiment.researchers.findIndex(r => r.id === user.id || r.email === user.email);
+    if (index !== -1) {
+      experiment.researchers.splice(index, 1);
+      setResearchers([...experiment.researchers]);
+    }
+  };
 
   const timeSeriesData = mockTimeSeries[activeSlave]?.[activeTab] ?? mockTimeSeries['slave-001'][activeTab];
   const cfg = sensorConfig[activeTab];
@@ -131,7 +158,7 @@ export default function Experiment() {
           <MetaItem label="Started" value={new Date(experiment.startedAt).toLocaleString('en-GB')} />
           <MetaItem label="Duration" value={experiment.duration} />
           <MetaItem label="Slave Nodes" value={String(experiment.slaveIds.length)} />
-          <MetaItem label="Researchers" value={String(experiment.researchers.length)} />
+          <MetaItem label="Researchers" value={String(researchers.length)} />
         </div>
       </div>
 
@@ -357,19 +384,40 @@ export default function Experiment() {
           {/* Researchers */}
           <div className="ev-card overflow-hidden">
             <div
-              className="flex items-center gap-2 px-4 py-3"
+              className="flex items-center justify-between px-4 py-3"
               style={{ borderBottom: '1px solid var(--ev-border-subtle)' }}
             >
-              <Users size={14} style={{ color: 'var(--ev-green-primary)' }} />
-              <h3
-                className="font-semibold text-sm"
-                style={{ fontFamily: 'Space Grotesk, monospace', color: 'var(--ev-text-primary)' }}
-              >
-                Researchers
-              </h3>
+              <div className="flex items-center gap-2">
+                <Users size={14} style={{ color: 'var(--ev-green-primary)' }} />
+                <h3
+                  className="font-semibold text-sm"
+                  style={{ fontFamily: 'Space Grotesk, monospace', color: 'var(--ev-text-primary)' }}
+                >
+                  Researchers
+                </h3>
+              </div>
+              {user && (
+                isUserInProject ? (
+                  <button
+                    onClick={handleLeaveProject}
+                    className="text-xs px-2 py-1 rounded transition-colors duration-200 hover:bg-red-500/20"
+                    style={{ backgroundColor: 'rgba(231, 76, 60, 0.1)', color: '#e74c3c', border: '1px solid rgba(231, 76, 60, 0.2)' }}
+                  >
+                    Leave
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleJoinProject}
+                    className="text-xs px-2 py-1 rounded transition-colors duration-200 hover:bg-green-500/20"
+                    style={{ backgroundColor: 'var(--ev-green-dim)', color: 'var(--ev-green-primary)', border: '1px solid var(--ev-green-muted)' }}
+                  >
+                    Join
+                  </button>
+                )
+              )}
             </div>
             <div className="p-3 space-y-2">
-              {experiment.researchers.map(r => (
+              {researchers.map(r => (
                 <div
                   key={r.id}
                   className="flex items-center gap-3 p-2 rounded transition-colors duration-200"

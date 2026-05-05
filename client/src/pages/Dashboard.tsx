@@ -101,7 +101,7 @@ export default function Dashboard() {
           >
             Active Experiments
           </h2>
-          <Link href="/experimento/exp-001">
+          <Link href="/experimentos">
             <button
               className="flex items-center gap-1 text-xs transition-colors duration-200"
               style={{ color: 'var(--ev-text-muted)' }}
