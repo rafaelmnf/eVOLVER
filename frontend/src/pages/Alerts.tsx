@@ -5,7 +5,8 @@
 
 import { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { mockAlerts, Alert, formatRelativeTime, getSensorLabel } from '@/lib/mockData';
+import { Alert, formatRelativeTime, getSensorLabel } from '@/lib/mockData';
+import { useLiveData } from '@/contexts/LiveDataContext';
 import {
   AlertCircle,
   AlertTriangle,
@@ -17,15 +18,13 @@ import {
 type FilterType = 'all' | 'critical' | 'warning' | 'info' | 'resolved';
 
 export default function Alerts() {
-  const [alerts, setAlerts] = useState<Alert[]>(mockAlerts);
+  const { alerts, resolveAlert } = useLiveData();
   const [filter, setFilter] = useState<FilterType>('all');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   function handleResolve(id: string) {
     if (confirmingId === id) {
-      setAlerts(prev =>
-        prev.map(a => a.id === id ? { ...a, resolved: true, resolvedAt: new Date().toISOString() } : a)
-      );
+      resolveAlert(id);
       setConfirmingId(null);
     } else {
       setConfirmingId(id);

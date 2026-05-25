@@ -1,10 +1,27 @@
 import { createServer } from "http";
 import { createApp } from "./app";
 import { config } from "./config/env";
+import { WebSocketService } from "./services/websocket";
+import { MQTTService } from "./services/mqtt";
 
 async function startServer() {
   const app = createApp();
   const server = createServer(app);
+
+  // Initialize WebSockets and MQTT Services
+  const wsService = new WebSocketService(server);
+  const mqttService = new MQTTService();
+
+  // Wire up MQTT reading events to WebSocket broadcasts
+  mqttService.on("reading", (data) => {
+    wsService.broadcast({
+      type: "MQTT_READING",
+      data,
+    });
+  });
+
+  // Connect to the MQTT Broker
+  mqttService.connect();
 
   server.listen(config.port, () => {
     console.log(`[eVOLVER Backend] Running in ${config.nodeEnv} mode at http://localhost:${config.port}/`);

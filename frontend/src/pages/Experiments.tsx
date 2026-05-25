@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Link, useLocation } from 'wouter';
-import { mockExperiments, mockSlaves, Experiment } from '@/lib/mockData';
+import { Experiment } from '@/lib/mockData';
+import { useLiveData } from '@/contexts/LiveDataContext';
 import { ChevronRight, Plus, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Experiments() {
-  const [experiments, setExperiments] = useState(mockExperiments);
+  const { experiments: liveExperiments, slaves } = useLiveData();
+  const [experiments, setExperiments] = useState(liveExperiments);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newExpName, setNewExpName] = useState('');
   const [newExpDesc, setNewExpDesc] = useState('');
@@ -17,7 +19,7 @@ export default function Experiments() {
 
   const handleCreate = () => {
     if (!user) return;
-    const newId = `exp-00${mockExperiments.length + 1}`;
+    const newId = `exp-00${liveExperiments.length + 1}`;
     
     const newExp: Experiment = {
       id: newId,
@@ -41,14 +43,14 @@ export default function Experiments() {
     };
 
     // Update slaves to belong to this new experiment
-    mockSlaves.forEach(slave => {
+    slaves.forEach(slave => {
       if (selectedSlaves.has(slave.id)) {
         slave.experimentId = newId;
       }
     });
 
-    mockExperiments.push(newExp);
-    setExperiments([...mockExperiments]);
+    liveExperiments.push(newExp);
+    setExperiments([...liveExperiments]);
     setIsModalOpen(false);
     setLocation(`/experimento/${newId}`);
   };
@@ -223,7 +225,7 @@ export default function Experiments() {
               <div>
                 <label className="ev-label block mb-2">Available Slave Nodes</label>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                  {mockSlaves.map(slave => {
+                  {slaves.map(slave => {
                     const isAvailable = slave.experimentId === null && slave.status !== 'offline';
                     const isSelected = selectedSlaves.has(slave.id);
                     return (

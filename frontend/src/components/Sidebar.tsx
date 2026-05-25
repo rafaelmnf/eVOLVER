@@ -16,7 +16,7 @@ import {
   WifiOff,
   LogOut,
 } from 'lucide-react';
-import { mockMaster, mockSlaves, mockAlerts } from '@/lib/mockData';
+import { useLiveData } from '@/contexts/LiveDataContext';
 import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
@@ -30,10 +30,11 @@ const navItems = [
 export default function Sidebar() {
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
+  const { slaves, alerts, master, isConnected } = useLiveData();
 
-  const activeSlaves = mockSlaves.filter(s => s.status === 'active').length;
-  const offlineSlaves = mockSlaves.filter(s => s.status === 'offline').length;
-  const unresolvedAlerts = mockAlerts.filter(a => !a.resolved).length;
+  const activeSlaves = slaves.filter(s => s.status === 'active').length;
+  const offlineSlaves = slaves.filter(s => s.status === 'offline').length;
+  const unresolvedAlerts = alerts.filter(a => !a.resolved).length;
 
   const handleLogout = () => {
     logout();
@@ -77,22 +78,22 @@ export default function Sidebar() {
         <div className="ev-card p-3 rounded" style={{ backgroundColor: 'var(--ev-bg-card)' }}>
           <div className="flex items-center justify-between mb-2">
             <span className="ev-label">Master Node</span>
-            <span className="ev-badge-active flex items-center gap-1">
+            <span className="ev-badge-active flex items-center gap-1" style={{ borderColor: isConnected ? 'var(--ev-green-muted)' : 'var(--ev-border-default)', backgroundColor: isConnected ? 'var(--ev-green-dim)' : 'var(--ev-bg-elevated)' }}>
               <span
                 className="w-1.5 h-1.5 rounded-full inline-block animate-pulse-dot"
-                style={{ backgroundColor: 'var(--ev-green-primary)' }}
+                style={{ backgroundColor: isConnected ? 'var(--ev-green-primary)' : '#d4a017' }}
               />
-              Online
+              {isConnected ? 'Online' : 'Offline'}
             </span>
           </div>
           <div
             className="text-xs font-mono"
             style={{ color: 'var(--ev-text-secondary)', fontFamily: 'IBM Plex Mono, monospace' }}
           >
-            {mockMaster.hostname}
+            {master.hostname}
           </div>
           <div className="text-xs mt-1" style={{ color: 'var(--ev-text-muted)' }}>
-            {mockMaster.ip} · up {mockMaster.uptime}
+            {master.ip} · up {master.uptime}
           </div>
         </div>
       </div>
@@ -160,7 +161,7 @@ export default function Sidebar() {
                 className="font-mono font-bold"
                 style={{ color: 'var(--ev-green-primary)', fontFamily: 'IBM Plex Mono, monospace' }}
               >
-                {activeSlaves}/{mockSlaves.length}
+                {activeSlaves}/{slaves.length}
               </span>
             </div>
             {offlineSlaves > 0 && (

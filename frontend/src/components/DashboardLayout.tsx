@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import AlertsDrawer from './AlertsDrawer';
 import { Bell } from 'lucide-react';
-import { mockAlerts } from '@/lib/mockData';
+import { useLiveData } from '@/contexts/LiveDataContext';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -24,7 +24,8 @@ export default function DashboardLayout({
   headerRight,
 }: DashboardLayoutProps) {
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const unresolvedAlerts = mockAlerts.filter(a => !a.resolved).length;
+  const { alerts } = useLiveData();
+  const unresolvedAlerts = alerts.filter(a => !a.resolved).length;
 
   return (
     <div

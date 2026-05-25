@@ -7,13 +7,8 @@
 import DashboardLayout from '@/components/DashboardLayout';
 import SlaveCard from '@/components/SlaveCard';
 import { Link } from 'wouter';
-import {
-  mockSlaves,
-  mockExperiments,
-  mockAlerts,
-  mockMaster,
-  formatRelativeTime,
-} from '@/lib/mockData';
+import { formatRelativeTime } from '@/lib/mockData';
+import { useLiveData } from '@/contexts/LiveDataContext';
 import {
   Activity,
   FlaskConical,
@@ -24,16 +19,18 @@ import {
 } from 'lucide-react';
 
 export default function Dashboard() {
-  const activeSlaves = mockSlaves.filter(s => s.status === 'active').length;
-  const warningSlaves = mockSlaves.filter(s => s.status === 'warning').length;
-  const offlineSlaves = mockSlaves.filter(s => s.status === 'offline').length;
-  const runningExperiments = mockExperiments.filter(e => e.status === 'running').length;
-  const unresolvedAlerts = mockAlerts.filter(a => !a.resolved).length;
+  const { slaves, experiments, alerts, master } = useLiveData();
+  
+  const activeSlaves = slaves.filter(s => s.status === 'active').length;
+  const warningSlaves = slaves.filter(s => s.status === 'warning').length;
+  const offlineSlaves = slaves.filter(s => s.status === 'offline').length;
+  const runningExperiments = experiments.filter(e => e.status === 'running').length;
+  const unresolvedAlerts = alerts.filter(a => !a.resolved).length;
 
   return (
     <DashboardLayout
       title="Dashboard"
-      subtitle={`System overview · Last sync ${formatRelativeTime(mockMaster.lastSync)}`}
+      subtitle={`System overview · Last sync ${formatRelativeTime(master.lastSync)}`}
       headerRight={
         <button
           className="flex items-center gap-2 text-xs px-3 py-2 rounded transition-all duration-200"
@@ -61,7 +58,7 @@ export default function Dashboard() {
         <StatCard
           icon={<Cpu size={18} />}
           label="Slave Nodes"
-          value={`${activeSlaves}/${mockSlaves.length}`}
+          value={`${activeSlaves}/${slaves.length}`}
           sub={`${warningSlaves} warning · ${offlineSlaves} offline`}
           color="var(--ev-green-primary)"
           index={0}
@@ -70,7 +67,7 @@ export default function Dashboard() {
           icon={<FlaskConical size={18} />}
           label="Running Experiments"
           value={String(runningExperiments)}
-          sub={`${mockExperiments.length} total`}
+          sub={`${experiments.length} total`}
           color="var(--ev-green-primary)"
           index={1}
         />
@@ -78,15 +75,15 @@ export default function Dashboard() {
           icon={<AlertTriangle size={18} />}
           label="Unresolved Alerts"
           value={String(unresolvedAlerts)}
-          sub={`${mockAlerts.length} total`}
+          sub={`${alerts.length} total`}
           color={unresolvedAlerts > 0 ? '#d4a017' : 'var(--ev-green-primary)'}
           index={2}
         />
         <StatCard
           icon={<Activity size={18} />}
           label="Master Uptime"
-          value={mockMaster.uptime}
-          sub={`Sync ${formatRelativeTime(mockMaster.lastSync)}`}
+          value={master.uptime}
+          sub={`Sync ${formatRelativeTime(master.lastSync)}`}
           color="var(--ev-green-primary)"
           index={3}
         />
@@ -115,7 +112,7 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          {mockExperiments
+          {experiments
             .filter(e => e.status === 'running')
             .map((exp, i) => (
               <Link key={exp.id} href={`/experimento/${exp.id}`}>
@@ -240,7 +237,7 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-3 gap-4">
-          {mockSlaves.map((slave, i) => (
+          {slaves.map((slave, i) => (
             <SlaveCard key={slave.id} slave={slave} index={i} />
           ))}
         </div>

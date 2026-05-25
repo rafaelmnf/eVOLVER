@@ -9,14 +9,12 @@ import { useParams } from 'wouter';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  mockExperiments,
-  mockAlerts,
-  mockSlaves,
   mockTimeSeries,
   Alert,
   formatRelativeTime,
   getSensorLabel,
 } from '@/lib/mockData';
+import { useLiveData } from '@/contexts/LiveDataContext';
 import {
   ResponsiveContainer,
   LineChart,
@@ -51,16 +49,14 @@ const sensorConfig: Record<SensorTab, { label: string; unit: string; color: stri
 export default function Experiment() {
   const params = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { experiments, alerts, slaves, resolveAlert } = useLiveData();
   const expId = params.id ?? 'exp-001';
-  const experiment = mockExperiments.find(e => e.id === expId) ?? mockExperiments[0];
-  const expAlerts = mockAlerts.filter(a => a.experimentId === expId);
-  const expSlaves = mockSlaves.filter(s => experiment.slaveIds.includes(s.id));
+  const experiment = experiments.find(e => e.id === expId) ?? experiments[0];
+  const expAlerts = alerts.filter(a => a.experimentId === expId);
+  const expSlaves = slaves.filter(s => experiment.slaveIds.includes(s.id));
 
   const [activeTab, setActiveTab] = useState<SensorTab>('temperature');
   const [activeSlave, setActiveSlave] = useState(expSlaves[0]?.id ?? 'slave-001');
-  const [resolvedAlerts, setResolvedAlerts] = useState<Set<string>>(
-    new Set(mockAlerts.filter(a => a.resolved).map(a => a.id))
-  );
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
   const [researchers, setResearchers] = useState(experiment.researchers);
@@ -108,15 +104,16 @@ export default function Experiment() {
 
   function handleResolve(alertId: string) {
     if (confirmingId === alertId) {
-      setResolvedAlerts(prev => { const next = new Set(prev); next.add(alertId); return next; });
+      resolveAlert(alertId);
       setConfirmingId(null);
     } else {
       setConfirmingId(alertId);
     }
   }
 
-  const activeAlerts = expAlerts.filter(a => !resolvedAlerts.has(a.id));
-  const resolvedAlertsList = expAlerts.filter(a => resolvedAlerts.has(a.id));
+  const activeAlerts = expAlerts.filter(a => !a.resolved);
+  const unresolvedAlertsCount = activeAlerts.length;
+  const resolvedAlertsList = expAlerts.filter(a => a.resolved);
 
   return (
     <DashboardLayout

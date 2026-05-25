@@ -6,7 +6,8 @@
 
 import { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { mockMaster, mockSlaves, RaspberrySlave, formatRelativeTime, getSensorLabel } from '@/lib/mockData';
+import { RaspberrySlave, formatRelativeTime, getSensorLabel } from '@/lib/mockData';
+import { useLiveData } from '@/contexts/LiveDataContext';
 import {
   Cpu,
   Wifi,
@@ -59,9 +60,10 @@ const defaultConfig: DeviceConfig = {
 };
 
 export default function Devices() {
+  const { slaves } = useLiveData();
   const [expandedSlave, setExpandedSlave] = useState<string | null>(null);
   const [configs, setConfigs] = useState<Record<string, DeviceConfig>>(
-    Object.fromEntries(mockSlaves.map(s => [s.id, { ...defaultConfig }]))
+    Object.fromEntries(slaves.map(s => [s.id, { ...defaultConfig }]))
   );
   const [savedConfigs, setSavedConfigs] = useState<Set<string>>(new Set());
   const [dirtyConfigs, setDirtyConfigs] = useState<Set<string>>(new Set());
@@ -126,7 +128,7 @@ export default function Devices() {
               />
 
               <div className="grid grid-cols-6 gap-3 pt-6">
-                {mockSlaves.map((slave, i) => (
+                {slaves.map((slave, i) => (
                   <div key={slave.id} className="flex flex-col items-center gap-2">
                     {/* Vertical connector */}
                     <div
@@ -161,7 +163,7 @@ export default function Devices() {
         </h2>
 
         <div className="space-y-3">
-          {mockSlaves.map((slave, i) => (
+          {slaves.map((slave, i) => (
             <SlaveConfigPanel
               key={slave.id}
               slave={slave}
@@ -183,40 +185,41 @@ export default function Devices() {
 }
 
 function MasterNode() {
+  const { master, isConnected } = useLiveData();
   return (
     <div className="flex flex-col items-center gap-2">
       <div
         className="px-6 py-4 rounded flex items-center gap-4"
         style={{
           backgroundColor: 'var(--ev-bg-elevated)',
-          border: '2px solid var(--ev-green-muted)',
-          boxShadow: '0 0 24px var(--ev-green-glow)',
+          border: `2px solid ${isConnected ? 'var(--ev-green-muted)' : 'var(--ev-border-default)'}`,
+          boxShadow: isConnected ? '0 0 24px var(--ev-green-glow)' : 'none',
           minWidth: 240,
         }}
       >
         <div
           className="w-10 h-10 rounded flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: 'var(--ev-green-dim)', border: '1px solid var(--ev-green-muted)' }}
+          style={{ backgroundColor: isConnected ? 'var(--ev-green-dim)' : 'var(--ev-bg-card)', border: '1px solid var(--ev-border-subtle)' }}
         >
-          <Server size={20} style={{ color: 'var(--ev-green-primary)' }} />
+          <Server size={20} style={{ color: isConnected ? 'var(--ev-green-primary)' : 'var(--ev-text-muted)' }} />
         </div>
         <div>
           <div
             className="font-bold text-sm"
             style={{ fontFamily: 'IBM Plex Mono, monospace', color: 'var(--ev-text-primary)' }}
           >
-            {mockMaster.hostname}
+            {master.hostname}
           </div>
           <div className="text-xs" style={{ color: 'var(--ev-text-muted)', fontFamily: 'IBM Plex Mono, monospace' }}>
-            {mockMaster.ip} · MASTER
+            {master.ip} · MASTER
           </div>
           <div className="flex items-center gap-1.5 mt-1">
             <span
               className="w-1.5 h-1.5 rounded-full animate-pulse-dot"
-              style={{ backgroundColor: 'var(--ev-green-primary)' }}
+              style={{ backgroundColor: isConnected ? 'var(--ev-green-primary)' : '#d4a017' }}
             />
-            <span className="text-xs" style={{ color: 'var(--ev-green-primary)' }}>
-              Online · up {mockMaster.uptime}
+            <span className="text-xs" style={{ color: isConnected ? 'var(--ev-green-primary)' : '#d4a017' }}>
+              {isConnected ? 'Online' : 'Offline'} · up {master.uptime}
             </span>
           </div>
         </div>

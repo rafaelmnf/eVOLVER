@@ -4,10 +4,11 @@
  */
 
 import DashboardLayout from '@/components/DashboardLayout';
-import { mockMaster } from '@/lib/mockData';
+import { useLiveData } from '@/contexts/LiveDataContext';
 import { Server, Bell, Shield, Database } from 'lucide-react';
 
 export default function Settings() {
+  const { master } = useLiveData();
   return (
     <DashboardLayout
       title="Settings"
@@ -33,7 +34,7 @@ export default function Settings() {
               <label className="ev-label block mb-1">Master Node Hostname</label>
               <input
                 className="ev-input w-full"
-                defaultValue={mockMaster.hostname}
+                defaultValue={master.hostname}
                 style={{ fontFamily: 'IBM Plex Mono, monospace' }}
               />
             </div>
@@ -41,7 +42,7 @@ export default function Settings() {
               <label className="ev-label block mb-1">Master Node IP</label>
               <input
                 className="ev-input w-full"
-                defaultValue={mockMaster.ip}
+                defaultValue={master.ip}
                 style={{ fontFamily: 'IBM Plex Mono, monospace' }}
               />
             </div>

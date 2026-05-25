@@ -6,7 +6,8 @@
 
 import { useState } from 'react';
 import { X, AlertTriangle, AlertCircle, Info, CheckCircle2 } from 'lucide-react';
-import { mockAlerts, Alert, formatRelativeTime, getSensorLabel } from '@/lib/mockData';
+import { Alert, formatRelativeTime, getSensorLabel } from '@/lib/mockData';
+import { useLiveData } from '@/contexts/LiveDataContext';
 
 interface AlertsDrawerProps {
   open: boolean;
@@ -14,7 +15,7 @@ interface AlertsDrawerProps {
 }
 
 export default function AlertsDrawer({ open, onClose }: AlertsDrawerProps) {
-  const [alerts, setAlerts] = useState<Alert[]>(mockAlerts);
+  const { alerts, resolveAlert } = useLiveData();
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const unresolvedAlerts = alerts.filter(a => !a.resolved);
@@ -22,11 +23,7 @@ export default function AlertsDrawer({ open, onClose }: AlertsDrawerProps) {
 
   function handleResolve(id: string) {
     if (confirmingId === id) {
-      setAlerts(prev =>
-        prev.map(a =>
-          a.id === id ? { ...a, resolved: true, resolvedAt: new Date().toISOString() } : a
-        )
-      );
+      resolveAlert(id);
       setConfirmingId(null);
     } else {
       setConfirmingId(id);
