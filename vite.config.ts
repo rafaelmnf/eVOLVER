@@ -22,8 +22,8 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 3000,
-    strictPort: false, // Will find next available port if 3000 is busy
+    port: 5173,
+    strictPort: true,
     host: true,
     allowedHosts: [
       "localhost",
