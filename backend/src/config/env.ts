@@ -1,3 +1,4 @@
+// lê variáveis de ambiente e fornece valores padrão:
 import path from "path";
 import { fileURLToPath } from "url";
 
