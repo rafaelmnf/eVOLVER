@@ -7,12 +7,14 @@ export class MQTTService extends EventEmitter {
   private topic = "projeto/sensores/#";
 
   public connect() {
+    // Conecta a um broker MQTT EXISTENTE
     console.log(`[MQTT Service] Connecting to broker at ${config.mqttUrl}...`);
     this.client = mqtt.connect(config.mqttUrl);
 
     this.client.on("connect", () => {
       console.log("✅ [MQTT Service] Connected to Broker MQTT!");
       
+      // Escuta o tópico
       this.client?.subscribe(this.topic, (err) => {
         if (!err) {
           console.log(`🎧 [MQTT Service] Listening to topic: ${this.topic}`);
@@ -35,6 +37,9 @@ export class MQTTService extends EventEmitter {
         console.log(`   🌡️ Temp: ${dados.temp} °C | 🧪 OD: ${dados.densidade}`);
 
         // Emit typed event
+        // Quando chega mensagem:
+        // { "temp": 35.2, "densidade": 0.45 } no tópico "projeto/sensores/rasp5"
+        // this.emit("reading", { origem: "rasp5", temp: 35.2, densidade: 0.45 })
         this.emit("reading", {
           origem,
           temp: typeof dados.temp === "number" ? dados.temp : parseFloat(dados.temp),

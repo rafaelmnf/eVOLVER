@@ -60,13 +60,18 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
         }));
       };
 
+      // Conecta ao WebSocket
       socket.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
 
+          // Atualiza o estado com novos dados
           if (message.type === "MQTT_READING") {
             const { origem, temp, densidade, timestamp } = message.data;
 
+            // Encontra o slave correspondente (rasp5)
+            // Atualiza temperatura, densidade, histórico...
+            // Verifica alertas (temp > 38.5°C ou < 30°C)
             setSlaves((prevSlaves) => {
               // Robust matching algorithm for matching topics to slaves
               const index = prevSlaves.findIndex((s) => 

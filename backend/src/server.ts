@@ -12,9 +12,10 @@ async function startServer() {
   const wsService = new WebSocketService(server);
   const mqttService = new MQTTService();
 
+  // Recebe o evento do MQTT
   // Wire up MQTT reading events to WebSocket broadcasts
   mqttService.on("reading", (data) => {
-    wsService.broadcast({
+    wsService.broadcast({  // Envia para TODOS os clientes conectados
       type: "MQTT_READING",
       data,
     });
