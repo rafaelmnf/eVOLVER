@@ -47,6 +47,9 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
     const wsUrl = `${protocol}//${host}`;
 
     console.log(`🔌 [WebSocket client] Connecting to ${wsUrl}...`);
+    // Código monta a URL e "disca" para o servidor com o wsUrl
+    // O objeto WebSocket é uma API nativa do próprio navegador (Chrome, Edge, etc). 
+    // Ele é o responsável direto por lidar com os pacotes da rede TCP/IP por baixo dos panos.
     let socket = new WebSocket(wsUrl);
 
     const connectWS = () => {
@@ -61,12 +64,15 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
       };
 
       // Conecta ao WebSocket
+      // Toda vez que o seu backend dá um ws.send() (ou o broadcast() que vimos antes), o navegador dispara a função onmessage.
       socket.onmessage = (event) => {
         try {
+          // Transforma o JSON em Objeto
           const message = JSON.parse(event.data);
 
           // Atualiza o estado com novos dados
-          if (message.type === "MQTT_READING") {
+          
+          if (message.type === "MQTT_READING") { // // Isso é importante porque no  futuro você poderia ter outros tipos de mensagens passando pelo mesmo cabo (como "SYSTEM_ALERT", "CHAT_MESSAGE", etc)
             const { origem, temp, densidade, timestamp } = message.data;
 
             // Encontra o slave correspondente (rasp5)
@@ -104,6 +110,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
               // Update Temperature readings
               const tempHistory = [...slave.sensors.temperature.history];
               const prevTemp = tempHistory[tempHistory.length - 1] ?? temp;
+              // empurra valores novos e descartas aqueles depois de 20
               tempHistory.push(temp);
               if (tempHistory.length > 20) tempHistory.shift();
 
@@ -113,6 +120,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                   ...slave.sensors.temperature,
                   value: temp,
                   history: tempHistory,
+                  // trend é para comparar a temperatura atual com a anterior para deixar a seta para cima/baixo
                   trend: temp > prevTemp ? "up" : temp < prevTemp ? "down" : "stable",
                   trendDelta: parseFloat((temp - prevTemp).toFixed(2)),
                   quality: isWarning ? "poor" : "excellent"
@@ -203,6 +211,8 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
         }
       };
 
+      // Se a rede falhar, o servidor reiniciar ou o Wi-Fi cair, a conexão WebSocket se quebra.
+      //  Se o backend cair, o painel do Biorreator vai mostrar "offline", mas a cada 5 segundos ele tenta fazer uma ligação nova e invisível. Se o backend voltar, o sistema volta à vida sozinho sem o usuário precisar apertar F5 na página
       socket.onclose = () => {
         console.log("🔌 [WebSocket client] Connection closed. Retrying in 5 seconds...");
         setIsConnected(false);

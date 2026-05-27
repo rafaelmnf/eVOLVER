@@ -9,6 +9,7 @@ export class MQTTService extends EventEmitter {
   public connect() {
     // Conecta a um broker MQTT EXISTENTE
     console.log(`[MQTT Service] Connecting to broker at ${config.mqttUrl}...`);
+    // config.mqttUrl tem "mqtt://localhost:1883"
     this.client = mqtt.connect(config.mqttUrl);
 
     this.client.on("connect", () => {
@@ -25,8 +26,12 @@ export class MQTTService extends EventEmitter {
       });
     });
 
+    /* Toda vez que o Raspberry Pi publica uma mensagem lá no broker, o broker manda essa mensagem pra cá. 
+    O arquivo recebe, transforma o dado cru em um objeto de fácil leitura (JSON), descobre quem 
+    enviou (extraindo o final do tópico, ex: rasp5), formata os dados e avisa o restante do sistema. */
     this.client.on("message", (topic, message) => {
       try {
+        // A mensagem chega crua e transforma em JSON
         const payloadString = message.toString();
         const dados = JSON.parse(payloadString);
         
@@ -36,10 +41,10 @@ export class MQTTService extends EventEmitter {
         console.log(`📥 [MQTT Service] [${origem.toUpperCase()}] Received:`);
         console.log(`   🌡️ Temp: ${dados.temp} °C | 🧪 OD: ${dados.densidade}`);
 
-        // Emit typed event
-        // Quando chega mensagem:
-        // { "temp": 35.2, "densidade": 0.45 } no tópico "projeto/sensores/rasp5"
+        // Quando chega mensagem: { "temp": 35.2, "densidade": 0.45 } no tópico "projeto/sensores/rasp5"
         // this.emit("reading", { origem: "rasp5", temp: 35.2, densidade: 0.45 })
+        // Aqui está usando a extensão da classe atual EventEmitter para poder emitir alertas (eventos).
+        // Ele permite que outros arquivos se "inscrevam" para ouvir esse grito, usando o método .on()
         this.emit("reading", {
           origem,
           temp: typeof dados.temp === "number" ? dados.temp : parseFloat(dados.temp),

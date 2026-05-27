@@ -8,13 +8,16 @@ async function startServer() {
   const app = createApp();
   const server = createServer(app);
 
-  // Initialize WebSockets and MQTT Services
+  // Instancia os dois serviços
   const wsService = new WebSocketService(server);
   const mqttService = new MQTTService();
 
-  // Recebe o evento do MQTT
-  // Wire up MQTT reading events to WebSocket broadcasts
+  /* Aqui interliga os dois serviços: 
+     Ao criar um objeto mqttService, ele vem com o EventEmitter. Aqui ele usa dela para ouvir o alerta reading emitido ao receber os dados
+     das raspberrys e repassa esse data usando a função criada broadcast para o frontend
+  */ 
   mqttService.on("reading", (data) => {
+    // Essa função está pleo objeto wsService
     wsService.broadcast({  // Envia para TODOS os clientes conectados
       type: "MQTT_READING",
       data,
