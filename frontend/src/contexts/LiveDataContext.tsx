@@ -1,9 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import {
-  mockSlaves,
-  mockExperiments,
-  mockAlerts,
-  mockMaster,
   RaspberrySlave,
   Experiment,
   Alert,
@@ -23,11 +19,24 @@ interface LiveDataContextType {
 const LiveDataContext = createContext<LiveDataContextType | undefined>(undefined);
 
 export function LiveDataProvider({ children }: { children: React.ReactNode }) {
-  const [slaves, setSlaves] = useState<RaspberrySlave[]>(mockSlaves);
-  const [experiments, setExperiments] = useState<Experiment[]>(mockExperiments);
-  const [alerts, setAlerts] = useState<Alert[]>(mockAlerts);
-  const [master, setMaster] = useState<RaspberryMaster>(mockMaster);
+  const [slaves, setSlaves] = useState<RaspberrySlave[]>([]);
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [master, setMaster] = useState<RaspberryMaster>({
+    id: "master-001",
+    hostname: "evolver-master",
+    ip: "192.168.1.10",
+    status: "offline",
+    slaves: [],
+    uptime: "0d 0h 0m",
+    lastSync: ""
+  });
   const [isConnected, setIsConnected] = useState<boolean>(false);
+
+  const slavesRef = useRef(slaves);
+  useEffect(() => {
+    slavesRef.current = slaves;
+  }, [slaves]);
 
   const resolveAlert = (id: string) => {
     setAlerts((prev) =>
@@ -75,130 +84,203 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
           if (message.type === "MQTT_READING") { // // Isso é importante porque no  futuro você poderia ter outros tipos de mensagens passando pelo mesmo cabo (como "SYSTEM_ALERT", "CHAT_MESSAGE", etc)
             const { origem, temp, densidade, timestamp } = message.data;
 
-            // Encontra o slave correspondente (rasp5)
-            // Atualiza temperatura, densidade, histórico...
-            // Verifica alertas (temp > 38.5°C ou < 30°C)
-            setSlaves((prevSlaves) => {
-              // Robust matching algorithm for matching topics to slaves
-              const index = prevSlaves.findIndex((s) => 
-                s.id.toLowerCase() === origem.toLowerCase() ||
-                s.hostname.toLowerCase() === origem.toLowerCase() ||
-                s.hostname.toLowerCase().includes(origem.toLowerCase()) ||
-                origem.toLowerCase().includes(s.hostname.toLowerCase()) ||
-                origem.toLowerCase().includes(s.id.toLowerCase())
-              );
+            // Determine threshold warnings
+            let isWarning = false;
+            let warningMsg = "";
+            if (temp > 38.5) {
+              isWarning = true;
+              warningMsg = `Temperature above safe threshold (${temp}°C > 38.5°C)`;
+            } else if (temp < 30.0) {
+              isWarning = true;
+              warningMsg = `Temperature below safe threshold (${temp}°C < 30.0°C)`;
+            }
 
-              if (index === -1) {
-                console.warn(`[Live Data] Could not find matched slave for topic source: ${origem}`);
-                return prevSlaves;
-              }
+            const currentSlaves = slavesRef.current;
+            const index = currentSlaves.findIndex((s) => 
+              s.id.toLowerCase() === origem.toLowerCase() ||
+              s.hostname.toLowerCase() === origem.toLowerCase() ||
+              s.hostname.toLowerCase().includes(origem.toLowerCase()) ||
+              origem.toLowerCase().includes(s.hostname.toLowerCase()) ||
+              origem.toLowerCase().includes(s.id.toLowerCase())
+            );
 
-              const newSlaves = [...prevSlaves];
-              const slave = { ...newSlaves[index] };
-
-              // Determine threshold warnings
-              let isWarning = false;
-              let warningMsg = "";
-              if (temp > 38.5) {
-                isWarning = true;
-                warningMsg = `Temperature above safe threshold (${temp}°C > 38.5°C)`;
-              } else if (temp < 30.0) {
-                isWarning = true;
-                warningMsg = `Temperature below safe threshold (${temp}°C < 30.0°C)`;
-              }
-
-              // Update Temperature readings
-              const tempHistory = [...slave.sensors.temperature.history];
-              const prevTemp = tempHistory[tempHistory.length - 1] ?? temp;
-              // empurra valores novos e descartas aqueles depois de 20
-              tempHistory.push(temp);
-              if (tempHistory.length > 20) tempHistory.shift();
-
-              slave.sensors = {
-                ...slave.sensors,
-                temperature: {
-                  ...slave.sensors.temperature,
-                  value: temp,
-                  history: tempHistory,
-                  // trend é para comparar a temperatura atual com a anterior para deixar a seta para cima/baixo
-                  trend: temp > prevTemp ? "up" : temp < prevTemp ? "down" : "stable",
-                  trendDelta: parseFloat((temp - prevTemp).toFixed(2)),
-                  quality: isWarning ? "poor" : "excellent"
+            if (index === -1) {
+              console.log(`🔌 [Live Data] Discovered new slave: ${origem}`);
+              const newSlave: RaspberrySlave = {
+                id: origem,
+                hostname: origem,
+                ip: "Connected",
+                status: isWarning ? "warning" : "active",
+                lastSeen: timestamp,
+                experimentId: null,
+                alertCount: isWarning ? 1 : 0,
+                sensors: {
+                  temperature: {
+                    value: temp,
+                    unit: "°C",
+                    trend: "stable",
+                    trendDelta: 0,
+                    quality: isWarning ? "poor" : "excellent",
+                    history: [temp]
+                  },
+                  ph: {
+                    value: 7.0,
+                    unit: "pH",
+                    trend: "stable",
+                    trendDelta: 0,
+                    quality: "excellent",
+                    history: [7.0]
+                  },
+                  od: {
+                    value: densidade,
+                    unit: "OD600",
+                    trend: "stable",
+                    trendDelta: 0,
+                    quality: "excellent",
+                    history: [densidade]
+                  },
+                  agitation: {
+                    value: 200,
+                    unit: "RPM",
+                    trend: "stable",
+                    trendDelta: 0,
+                    quality: "excellent",
+                    history: [200]
+                  }
                 }
               };
 
-              // Update Optical Density (OD) readings
-              const odHistory = [...slave.sensors.od.history];
-              const prevOD = odHistory[odHistory.length - 1] ?? densidade;
-              odHistory.push(densidade);
-              if (odHistory.length > 20) odHistory.shift();
+              setSlaves((prev) => [...prev, newSlave]);
 
-              slave.sensors.od = {
-                ...slave.sensors.od,
-                value: densidade,
-                history: odHistory,
-                trend: densidade > prevOD ? "up" : densidade < prevOD ? "down" : "stable",
-                trendDelta: parseFloat((densidade - prevOD).toFixed(3)),
-                quality: "excellent"
-              };
-
-              // Update general slave states
-              slave.lastSeen = timestamp;
-              slave.status = isWarning ? "warning" : "active";
-
-              // Handle Alert Generation in real-time
               if (isWarning) {
                 setAlerts((prevAlerts) => {
-                  // Check if there is already an active alert for this sensor and slave
-                  const hasActiveAlert = prevAlerts.some(
-                    (a) => a.slaveId === slave.id && a.sensor === "temperature" && !a.resolved
-                  );
-
-                  if (!hasActiveAlert) {
-                    const newAlert = {
-                      id: `alert-${Date.now()}`,
-                      slaveId: slave.id,
-                      slaveName: slave.hostname,
-                      experimentId: slave.experimentId,
-                      sensor: "temperature" as SensorType,
-                      severity: "warning" as const,
-                      message: warningMsg,
-                      value: temp,
-                      threshold: 38.5,
-                      timestamp: new Date().toISOString(),
-                      resolved: false,
-                      resolvedAt: null
-                    };
-                    slave.alertCount += 1;
-                    return [newAlert, ...prevAlerts];
-                  }
-                  return prevAlerts;
-                });
-              } else {
-                // If it returned to normal, resolve active alerts for this slave
-                setAlerts((prevAlerts) => {
-                  let alertResolved = false;
-                  const updatedAlerts = prevAlerts.map((a) => {
-                    if (a.slaveId === slave.id && a.sensor === "temperature" && !a.resolved) {
-                      alertResolved = true;
-                      return {
-                        ...a,
-                        resolved: true,
-                        resolvedAt: new Date().toISOString()
-                      };
-                    }
-                    return a;
-                  });
-                  if (alertResolved && slave.alertCount > 0) {
-                    slave.alertCount -= 1;
-                  }
-                  return updatedAlerts;
+                  const newAlert = {
+                    id: `alert-${Date.now()}`,
+                    slaveId: newSlave.id,
+                    slaveName: newSlave.hostname,
+                    experimentId: null,
+                    sensor: "temperature" as SensorType,
+                    severity: "warning" as const,
+                    message: warningMsg,
+                    value: temp,
+                    threshold: 38.5,
+                    timestamp: new Date().toISOString(),
+                    resolved: false,
+                    resolvedAt: null
+                  };
+                  return [newAlert, ...prevAlerts];
                 });
               }
 
-              newSlaves[index] = slave;
-              return newSlaves;
-            });
+              setMaster((prev) => {
+                const updatedSlaves = prev.slaves.includes(origem)
+                  ? prev.slaves
+                  : [...prev.slaves, origem];
+                return {
+                  ...prev,
+                  slaves: updatedSlaves,
+                  lastSync: new Date().toISOString()
+                };
+              });
+
+            } else {
+              setSlaves((prevSlaves) => {
+                const newSlaves = [...prevSlaves];
+                const slave = { ...newSlaves[index] };
+
+                // Update Temperature readings
+                const tempHistory = [...slave.sensors.temperature.history];
+                const prevTemp = tempHistory[tempHistory.length - 1] ?? temp;
+                // empurra valores novos e descartas aqueles depois de 20
+                tempHistory.push(temp);
+                if (tempHistory.length > 20) tempHistory.shift();
+
+                slave.sensors = {
+                  ...slave.sensors,
+                  temperature: {
+                    ...slave.sensors.temperature,
+                    value: temp,
+                    history: tempHistory,
+                    // trend é para comparar a temperatura atual com a anterior para deixar a seta para cima/baixo
+                    trend: temp > prevTemp ? "up" : temp < prevTemp ? "down" : "stable",
+                    trendDelta: parseFloat((temp - prevTemp).toFixed(2)),
+                    quality: isWarning ? "poor" : "excellent"
+                  }
+                };
+
+                // Update Optical Density (OD) readings
+                const odHistory = [...slave.sensors.od.history];
+                const prevOD = odHistory[odHistory.length - 1] ?? densidade;
+                odHistory.push(densidade);
+                if (odHistory.length > 20) odHistory.shift();
+
+                slave.sensors.od = {
+                  ...slave.sensors.od,
+                  value: densidade,
+                  history: odHistory,
+                  trend: densidade > prevOD ? "up" : densidade < prevOD ? "down" : "stable",
+                  trendDelta: parseFloat((densidade - prevOD).toFixed(3)),
+                  quality: "excellent"
+                };
+
+                // Update general slave states
+                slave.lastSeen = timestamp;
+                slave.status = isWarning ? "warning" : "active";
+
+                // Handle Alert Generation in real-time
+                if (isWarning) {
+                  setAlerts((prevAlerts) => {
+                    // Check if there is already an active alert for this sensor and slave
+                    const hasActiveAlert = prevAlerts.some(
+                      (a) => a.slaveId === slave.id && a.sensor === "temperature" && !a.resolved
+                    );
+
+                    if (!hasActiveAlert) {
+                      const newAlert = {
+                        id: `alert-${Date.now()}`,
+                        slaveId: slave.id,
+                        slaveName: slave.hostname,
+                        experimentId: slave.experimentId,
+                        sensor: "temperature" as SensorType,
+                        severity: "warning" as const,
+                        message: warningMsg,
+                        value: temp,
+                        threshold: 38.5,
+                        timestamp: new Date().toISOString(),
+                        resolved: false,
+                        resolvedAt: null
+                      };
+                      slave.alertCount += 1;
+                      return [newAlert, ...prevAlerts];
+                    }
+                    return prevAlerts;
+                  });
+                } else {
+                  // If it returned to normal, resolve active alerts for this slave
+                  setAlerts((prevAlerts) => {
+                    let alertResolved = false;
+                    const updatedAlerts = prevAlerts.map((a) => {
+                      if (a.slaveId === slave.id && a.sensor === "temperature" && !a.resolved) {
+                        alertResolved = true;
+                        return {
+                          ...a,
+                          resolved: true,
+                          resolvedAt: new Date().toISOString()
+                        };
+                      }
+                      return a;
+                    });
+                    if (alertResolved && slave.alertCount > 0) {
+                      slave.alertCount -= 1;
+                    }
+                    return updatedAlerts;
+                  });
+                }
+
+                newSlaves[index] = slave;
+                return newSlaves;
+              });
+            }
 
             // Update sync status on Master
             setMaster((prev) => ({

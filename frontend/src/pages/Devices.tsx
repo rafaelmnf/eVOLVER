@@ -126,27 +126,34 @@ export default function Devices() {
                   marginRight: '8%',
                 }}
               />
-
               <div className="grid grid-cols-6 gap-3 pt-6">
-                {slaves.map((slave, i) => (
-                  <div key={slave.id} className="flex flex-col items-center gap-2">
-                    {/* Vertical connector */}
-                    <div
-                      style={{
-                        width: '1px',
-                        height: '24px',
-                        backgroundColor: slave.status === 'offline' ? '#2a1a1a' : 'var(--ev-green-muted)',
-                        marginBottom: '-8px',
-                      }}
-                    />
-                    <TopologySlaveNode
-                      slave={slave}
-                      index={i}
-                      expanded={expandedSlave === slave.id}
-                      onToggle={() => setExpandedSlave(expandedSlave === slave.id ? null : slave.id)}
-                    />
+                {slaves.length === 0 ? (
+                  <div className="col-span-6 flex flex-col items-center justify-center py-6" style={{ color: 'var(--ev-text-muted)' }}>
+                    <p className="text-xs" style={{ fontFamily: 'IBM Plex Mono, monospace' }}>
+                      Aguardando conexões de nós Slaves...
+                    </p>
                   </div>
-                ))}
+                ) : (
+                  slaves.map((slave, i) => (
+                    <div key={slave.id} className="flex flex-col items-center gap-2">
+                      {/* Vertical connector */}
+                      <div
+                        style={{
+                          width: '1px',
+                          height: '24px',
+                          backgroundColor: slave.status === 'offline' ? '#2a1a1a' : 'var(--ev-green-muted)',
+                          marginBottom: '-8px',
+                        }}
+                      />
+                      <TopologySlaveNode
+                        slave={slave}
+                        index={i}
+                        expanded={expandedSlave === slave.id}
+                        onToggle={() => setExpandedSlave(expandedSlave === slave.id ? null : slave.id)}
+                      />
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -163,21 +170,30 @@ export default function Devices() {
         </h2>
 
         <div className="space-y-3">
-          {slaves.map((slave, i) => (
-            <SlaveConfigPanel
-              key={slave.id}
-              slave={slave}
-              index={i}
-              config={configs[slave.id]}
-              expanded={expandedSlave === slave.id}
-              onToggle={() => setExpandedSlave(expandedSlave === slave.id ? null : slave.id)}
-              onChange={(field, value) => handleConfigChange(slave.id, field, value)}
-              onSave={() => handleSave(slave.id)}
-              onReset={() => handleReset(slave.id)}
-              isDirty={dirtyConfigs.has(slave.id)}
-              isSaved={savedConfigs.has(slave.id)}
-            />
-          ))}
+          {slaves.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 rounded ev-card" style={{ border: '1px dashed var(--ev-border-subtle)', backgroundColor: 'var(--ev-bg-card)' }}>
+              <Cpu size={24} className="mb-2 animate-pulse" style={{ color: 'var(--ev-green-primary)' }} />
+              <p className="text-xs font-semibold" style={{ fontFamily: 'Space Grotesk, monospace', color: 'var(--ev-text-secondary)' }}>
+                Nenhuma configuração de dispositivo ativa
+              </p>
+            </div>
+          ) : (
+            slaves.map((slave, i) => (
+              <SlaveConfigPanel
+                key={slave.id}
+                slave={slave}
+                index={i}
+                config={configs[slave.id] ?? defaultConfig}
+                expanded={expandedSlave === slave.id}
+                onToggle={() => setExpandedSlave(expandedSlave === slave.id ? null : slave.id)}
+                onChange={(field, value) => handleConfigChange(slave.id, field, value)}
+                onSave={() => handleSave(slave.id)}
+                onReset={() => handleReset(slave.id)}
+                isDirty={dirtyConfigs.has(slave.id)}
+                isSaved={savedConfigs.has(slave.id)}
+              />
+            ))
+          )}
         </div>
       </section>
     </DashboardLayout>
@@ -387,8 +403,8 @@ function SlaveConfigPanel({
               slave.status === 'active'
                 ? 'ev-badge-active'
                 : slave.status === 'warning'
-                ? 'ev-badge-warning'
-                : 'ev-badge-offline'
+                  ? 'ev-badge-warning'
+                  : 'ev-badge-offline'
             }
           >
             {slave.status}

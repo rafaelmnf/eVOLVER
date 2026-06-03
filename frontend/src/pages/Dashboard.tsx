@@ -236,11 +236,23 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
-          {slaves.map((slave, i) => (
-            <SlaveCard key={slave.id} slave={slave} index={i} />
-          ))}
-        </div>
+        {slaves.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 px-4 rounded ev-card" style={{ border: '1px dashed var(--ev-border-subtle)', backgroundColor: 'var(--ev-bg-card)', minHeight: '180px' }}>
+            <Cpu size={36} className="mb-3 animate-pulse" style={{ color: 'var(--ev-green-primary)' }} />
+            <p className="text-sm font-semibold" style={{ fontFamily: 'Space Grotesk, monospace', color: 'var(--ev-text-secondary)' }}>
+              Aguardando conexões das Raspberry Pi...
+            </p>
+            <p className="text-xs text-center mt-1" style={{ color: 'var(--ev-text-muted)' }}>
+              Conecte uma Raspberry Pi Pico 2 na rede e envie dados via MQTT para vê-la aparecer aqui em tempo real.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-4">
+            {slaves.map((slave, i) => (
+              <SlaveCard key={slave.id} slave={slave} index={i} />
+            ))}
+          </div>
+        )}
       </section>
     </DashboardLayout>
   );
