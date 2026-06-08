@@ -103,8 +103,7 @@ while True:
         cliente_mqtt.publish(TOPICO.encode('utf-8'), carga_json.encode('utf-8'), qos=1) 
         print(f"📤 Enviado (QoS 1): {carga_json}")
         
-        
-        # Espera 5 segundos antes de ler de novo
+        # Mudar para uma variavel futuramente para modifcar de 20s a 200s 
         time.sleep(5)
         
     except Exception as e:
