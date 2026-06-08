@@ -4,7 +4,9 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "vite --host",
+    "dev:frontend": "vite --host",
+    "dev:backend": "tsx watch backend/src/server.ts",
+    "dev": "concurrently -k \"pnpm dev:frontend\" \"pnpm dev:backend\" --names \"frontend,backend\" --prefix-colors \"blue,green\"",
     "build": "vite build && esbuild backend/src/server.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/index.js",
     "start": "NODE_ENV=production node dist/index.js",
     "preview": "vite preview --host",
@@ -69,6 +71,7 @@
   },
   "devDependencies": {
     "@builder.io/vite-plugin-jsx-loc": "^0.1.1",
+    "concurrently": "^9.2.1",
     "@tailwindcss/typography": "^0.5.15",
     "@tailwindcss/vite": "^4.1.3",
     "@types/express": "4.17.21",

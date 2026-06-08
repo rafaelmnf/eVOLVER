@@ -53,13 +53,29 @@ export default function Experiment() {
   const expId = params.id ?? 'exp-001';
   const experiment = experiments.find(e => e.id === expId) ?? experiments[0];
   const expAlerts = alerts.filter(a => a.experimentId === expId);
-  const expSlaves = slaves.filter(s => experiment.slaveIds.includes(s.id));
+  const expSlaves = slaves.filter(s => experiment?.slaveIds.includes(s.id));
 
   const [activeTab, setActiveTab] = useState<SensorTab>('temperature');
   const [activeSlave, setActiveSlave] = useState(expSlaves[0]?.id ?? 'slave-001');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
-  const [researchers, setResearchers] = useState(experiment.researchers);
+  const [researchers, setResearchers] = useState(experiment?.researchers ?? []);
+
+  if (!experiment) {
+    return (
+      <DashboardLayout title="Experiment" subtitle="Experiment not found">
+        <div className="flex flex-col items-center justify-center py-16 gap-3 ev-card">
+          <FlaskConical size={32} style={{ color: 'var(--ev-green-primary)' }} />
+          <p className="text-sm font-semibold" style={{ fontFamily: 'Space Grotesk, monospace', color: 'var(--ev-text-secondary)' }}>
+            Nenhum experimento ativo encontrado
+          </p>
+          <p className="text-xs text-center mt-1" style={{ color: 'var(--ev-text-muted)' }}>
+            Crie um novo experimento na aba de Experimentos para começar o monitoramento.
+          </p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const isUserInProject = researchers.some(r => r.id === user?.id || r.email === user?.email);
 
@@ -85,7 +101,13 @@ export default function Experiment() {
     }
   };
 
-  const timeSeriesData = mockTimeSeries[activeSlave]?.[activeTab] ?? mockTimeSeries['slave-001'][activeTab];
+  const slaveSensor = activeSlave ? slaves.find(s => s.id === activeSlave)?.sensors[activeTab] : null;
+  const timeSeriesData = mockTimeSeries[activeSlave]?.[activeTab] ?? 
+    (slaveSensor?.history.map((v, i) => ({
+      timestamp: new Date(Date.now() - (slaveSensor.history.length - i) * 60000).toISOString(),
+      value: v
+    })) ?? []);
+
   const cfg = sensorConfig[activeTab];
 
   // Format chart data

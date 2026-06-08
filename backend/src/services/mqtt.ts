@@ -5,16 +5,20 @@ import { config } from "../config/env";
 export class MQTTService extends EventEmitter {
   private client: MqttClient | null = null;
   private topic = "projeto/sensores/#";
+  private lastErrorMsg: string | null = null;
 
   public connect() {
     // Conecta a um broker MQTT EXISTENTE
     console.log(`[MQTT Service] Connecting to broker at ${config.mqttUrl}...`);
     // config.mqttUrl tem "mqtt://localhost:1883"
-    this.client = mqtt.connect(config.mqttUrl);
+    this.client = mqtt.connect(config.mqttUrl, {
+      reconnectPeriod: 5000,
+    });
 
     this.client.on("connect", () => {
       console.log("✅ [MQTT Service] Connected to Broker MQTT!");
-      
+      this.lastErrorMsg = null;
+
       // Escuta o tópico
       this.client?.subscribe(this.topic, (err) => {
         if (!err) {
@@ -34,7 +38,7 @@ export class MQTTService extends EventEmitter {
         // A mensagem chega crua e transforma em JSON
         const payloadString = message.toString();
         const dados = JSON.parse(payloadString);
-        
+
         // Extract slave identifier from topic (e.g. "rasp5", "slave-001")
         const origem = topic.split("/").pop() || "unknown";
 
@@ -58,7 +62,10 @@ export class MQTTService extends EventEmitter {
     });
 
     this.client.on("error", (err) => {
-      console.error("❌ [MQTT Service] Connection error:", err);
+      if (err.message !== this.lastErrorMsg) {
+        console.error("❌ [MQTT Service] Connection error:", err.message);
+        this.lastErrorMsg = err.message;
+      }
     });
   }
 }

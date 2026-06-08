@@ -3,7 +3,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { Link, useLocation } from 'wouter';
 import { Experiment } from '@/lib/mockData';
 import { useLiveData } from '@/contexts/LiveDataContext';
-import { ChevronRight, Plus, X } from 'lucide-react';
+import { ChevronRight, Plus, X, FlaskConical } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Experiments() {
@@ -78,112 +78,124 @@ export default function Experiments() {
         </button>
       }
     >
-      <div className="grid grid-cols-2 gap-4">
-        {experiments.map((exp, i) => (
-          <Link key={exp.id} href={`/experimento/${exp.id}`}>
-            <div
-              className="ev-card p-4 cursor-pointer animate-fade-in-up"
-              style={{ animationDelay: `${i * 50}ms` }}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1 min-w-0">
-                  <div
-                    className="font-semibold text-sm truncate"
-                    style={{ fontFamily: 'Space Grotesk, monospace', color: 'var(--ev-text-primary)' }}
-                  >
-                    {exp.name}
+      {experiments.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 rounded ev-card" style={{ border: '1px dashed var(--ev-border-subtle)', backgroundColor: 'var(--ev-bg-card)' }}>
+          <FlaskConical size={36} className="mb-3 animate-pulse" style={{ color: 'var(--ev-green-primary)' }} />
+          <p className="text-sm font-semibold" style={{ fontFamily: 'Space Grotesk, monospace', color: 'var(--ev-text-secondary)' }}>
+            Nenhum experimento ativo encontrado
+          </p>
+          <p className="text-xs text-center mt-1" style={{ color: 'var(--ev-text-muted)' }}>
+            Clique em "New Experiment" para criar e iniciar o monitoramento de um novo ensaio.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          {experiments.map((exp, i) => (
+            <Link key={exp.id} href={`/experimento/${exp.id}`}>
+              <div
+                className="ev-card p-4 cursor-pointer animate-fade-in-up"
+                style={{ animationDelay: `${i * 50}ms` }}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <div
+                      className="font-semibold text-sm truncate"
+                      style={{ fontFamily: 'Space Grotesk, monospace', color: 'var(--ev-text-primary)' }}
+                    >
+                      {exp.name}
+                    </div>
+                    <div className="text-xs mt-1 line-clamp-1" style={{ color: 'var(--ev-text-muted)' }}>
+                      {exp.description}
+                    </div>
                   </div>
-                  <div className="text-xs mt-1 line-clamp-1" style={{ color: 'var(--ev-text-muted)' }}>
-                    {exp.description}
-                  </div>
+                  {exp.status === 'running' ? (
+                    <span className="ev-badge-active ml-3 flex-shrink-0 flex items-center gap-1">
+                      <span
+                        className="w-1.5 h-1.5 rounded-full inline-block animate-pulse-dot"
+                        style={{ backgroundColor: 'var(--ev-green-primary)' }}
+                      />
+                      Running
+                    </span>
+                  ) : exp.status === 'completed' ? (
+                    <span className="ev-badge ml-3 flex-shrink-0 flex items-center gap-1" style={{ backgroundColor: 'var(--ev-bg-card)', color: 'var(--ev-text-muted)', border: '1px solid var(--ev-border-subtle)' }}>
+                      Completed
+                    </span>
+                  ) : (
+                    <span className="ev-badge ml-3 flex-shrink-0 flex items-center gap-1" style={{ backgroundColor: 'var(--ev-bg-card)', color: 'var(--ev-text-muted)', border: '1px solid var(--ev-border-subtle)' }}>
+                      {exp.status.charAt(0).toUpperCase() + exp.status.slice(1)}
+                    </span>
+                  )}
                 </div>
-                {exp.status === 'running' ? (
-                  <span className="ev-badge-active ml-3 flex-shrink-0 flex items-center gap-1">
-                    <span
-                      className="w-1.5 h-1.5 rounded-full inline-block animate-pulse-dot"
-                      style={{ backgroundColor: 'var(--ev-green-primary)' }}
-                    />
-                    Running
-                  </span>
-                ) : exp.status === 'completed' ? (
-                  <span className="ev-badge ml-3 flex-shrink-0 flex items-center gap-1" style={{ backgroundColor: 'var(--ev-bg-card)', color: 'var(--ev-text-muted)', border: '1px solid var(--ev-border-subtle)' }}>
-                    Completed
-                  </span>
-                ) : (
-                  <span className="ev-badge ml-3 flex-shrink-0 flex items-center gap-1" style={{ backgroundColor: 'var(--ev-bg-card)', color: 'var(--ev-text-muted)', border: '1px solid var(--ev-border-subtle)' }}>
-                    {exp.status.charAt(0).toUpperCase() + exp.status.slice(1)}
-                  </span>
-                )}
-              </div>
 
-              <div className="flex items-center gap-6 text-xs">
-                <div>
-                  <div className="ev-label mb-0.5">Duration</div>
-                  <div
-                    style={{ fontFamily: 'IBM Plex Mono, monospace', color: 'var(--ev-text-secondary)' }}
-                  >
-                    {exp.duration}
-                  </div>
-                </div>
-                <div>
-                  <div className="ev-label mb-0.5">Slaves</div>
-                  <div
-                    style={{ fontFamily: 'IBM Plex Mono, monospace', color: 'var(--ev-text-secondary)' }}
-                  >
-                    {exp.slaveIds.length}
-                  </div>
-                </div>
-                <div>
-                  <div className="ev-label mb-0.5">Researchers</div>
-                  <div
-                    style={{ fontFamily: 'IBM Plex Mono, monospace', color: 'var(--ev-text-secondary)' }}
-                  >
-                    {exp.researchers.length}
-                  </div>
-                </div>
-                {exp.alertCount > 0 && (
+                <div className="flex items-center gap-6 text-xs">
                   <div>
-                    <div className="ev-label mb-0.5">Alerts</div>
+                    <div className="ev-label mb-0.5">Duration</div>
                     <div
-                      style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#d4a017' }}
+                      style={{ fontFamily: 'IBM Plex Mono, monospace', color: 'var(--ev-text-secondary)' }}
                     >
-                      {exp.alertCount}
+                      {exp.duration}
                     </div>
                   </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: '1px solid var(--ev-border-subtle)' }}>
-                <div className="flex -space-x-1">
-                  {exp.researchers.slice(0, 3).map(r => (
+                  <div>
+                    <div className="ev-label mb-0.5">Slaves</div>
                     <div
-                      key={r.id}
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                      style={{
-                        backgroundColor: 'var(--ev-green-dim)',
-                        border: '1px solid var(--ev-green-muted)',
-                        color: 'var(--ev-green-primary)',
-                        fontFamily: 'IBM Plex Mono, monospace',
-                        fontSize: '0.6rem',
-                      }}
-                      title={r.name}
+                      style={{ fontFamily: 'IBM Plex Mono, monospace', color: 'var(--ev-text-secondary)' }}
                     >
-                      {r.avatar}
+                      {exp.slaveIds.length}
                     </div>
-                  ))}
+                  </div>
+                  <div>
+                    <div className="ev-label mb-0.5">Researchers</div>
+                    <div
+                      style={{ fontFamily: 'IBM Plex Mono, monospace', color: 'var(--ev-text-secondary)' }}
+                    >
+                      {exp.researchers.length}
+                    </div>
+                  </div>
+                  {exp.alertCount > 0 && (
+                    <div>
+                      <div className="ev-label mb-0.5">Alerts</div>
+                      <div
+                        style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#d4a017' }}
+                      >
+                        {exp.alertCount}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <span
-                  className="text-xs flex items-center gap-1"
-                  style={{ color: 'var(--ev-text-muted)' }}
-                >
-                  View details
-                  <ChevronRight size={11} />
-                </span>
+
+                <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: '1px solid var(--ev-border-subtle)' }}>
+                  <div className="flex -space-x-1">
+                    {exp.researchers.slice(0, 3).map(r => (
+                      <div
+                        key={r.id}
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                        style={{
+                          backgroundColor: 'var(--ev-green-dim)',
+                          border: '1px solid var(--ev-green-muted)',
+                          color: 'var(--ev-green-primary)',
+                          fontFamily: 'IBM Plex Mono, monospace',
+                          fontSize: '0.6rem',
+                        }}
+                        title={r.name}
+                      >
+                        {r.avatar}
+                      </div>
+                    ))}
+                  </div>
+                  <span
+                    className="text-xs flex items-center gap-1"
+                    style={{ color: 'var(--ev-text-muted)' }}
+                  >
+                    View details
+                    <ChevronRight size={11} />
+                  </span>
+                </div>
               </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
