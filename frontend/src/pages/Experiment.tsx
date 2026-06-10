@@ -59,8 +59,8 @@ export default function Experiment() {
   const [activeSlave, setActiveSlave] = useState(expSlaves[0]?.id ?? 'slave-001');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
-  const [researchers, setResearchers] = useState(experiment?.researchers ?? []);
-
+  // No researchers state needed, we just read from experiment.researcher
+  
   if (!experiment) {
     return (
       <DashboardLayout title="Experiment" subtitle="Experiment not found">
@@ -76,30 +76,6 @@ export default function Experiment() {
       </DashboardLayout>
     );
   }
-
-  const isUserInProject = researchers.some(r => r.id === user?.id || r.email === user?.email);
-
-  const handleJoinProject = () => {
-    if (!user) return;
-    const newResearcher = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: 'collaborator' as const,
-      avatar: user.name.substring(0, 2).toUpperCase()
-    };
-    experiment.researchers.push(newResearcher);
-    setResearchers([...experiment.researchers]);
-  };
-
-  const handleLeaveProject = () => {
-    if (!user) return;
-    const index = experiment.researchers.findIndex(r => r.id === user.id || r.email === user.email);
-    if (index !== -1) {
-      experiment.researchers.splice(index, 1);
-      setResearchers([...experiment.researchers]);
-    }
-  };
 
   const slaveSensor = activeSlave ? slaves.find(s => s.id === activeSlave)?.sensors[activeTab] : null;
   const timeSeriesData = mockTimeSeries[activeSlave]?.[activeTab] ?? 
@@ -177,7 +153,7 @@ export default function Experiment() {
           <MetaItem label="Started" value={new Date(experiment.startedAt).toLocaleString('en-GB')} />
           <MetaItem label="Duration" value={experiment.duration} />
           <MetaItem label="Slave Nodes" value={String(experiment.slaveIds.length)} />
-          <MetaItem label="Researchers" value={String(researchers.length)} />
+          <MetaItem label="Researcher" value={experiment.researcher.name} />
         </div>
       </div>
 
@@ -400,7 +376,7 @@ export default function Experiment() {
 
         {/* Right: Researchers + Slave status */}
         <div className="space-y-5">
-          {/* Researchers */}
+          {/* Researcher */}
           <div className="ev-card overflow-hidden">
             <div
               className="flex items-center justify-between px-4 py-3"
@@ -412,68 +388,40 @@ export default function Experiment() {
                   className="font-semibold text-sm"
                   style={{ fontFamily: 'Space Grotesk, monospace', color: 'var(--ev-text-primary)' }}
                 >
-                  Researchers
+                  Researcher
                 </h3>
               </div>
-              {user && (
-                isUserInProject ? (
-                  <button
-                    onClick={handleLeaveProject}
-                    className="text-xs px-2 py-1 rounded transition-colors duration-200 hover:bg-red-500/20"
-                    style={{ backgroundColor: 'rgba(231, 76, 60, 0.1)', color: '#e74c3c', border: '1px solid rgba(231, 76, 60, 0.2)' }}
-                  >
-                    Leave
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleJoinProject}
-                    className="text-xs px-2 py-1 rounded transition-colors duration-200 hover:bg-green-500/20"
-                    style={{ backgroundColor: 'var(--ev-green-dim)', color: 'var(--ev-green-primary)', border: '1px solid var(--ev-green-muted)' }}
-                  >
-                    Join
-                  </button>
-                )
-              )}
             </div>
-            <div className="p-3 space-y-2">
-              {researchers.map(r => (
+            <div className="p-3">
+              <div
+                className="flex items-center gap-3 p-2 rounded transition-colors duration-200"
+                style={{ borderRadius: '5px' }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(29,185,84,0.04)')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
                 <div
-                  key={r.id}
-                  className="flex items-center gap-3 p-2 rounded transition-colors duration-200"
-                  style={{ borderRadius: '5px' }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(29,185,84,0.04)')}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                  style={{
+                    backgroundColor: 'var(--ev-green-dim)',
+                    border: '1px solid var(--ev-green-muted)',
+                    color: 'var(--ev-green-primary)',
+                    fontFamily: 'IBM Plex Mono, monospace',
+                  }}
                 >
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                    style={{
-                      backgroundColor: 'var(--ev-green-dim)',
-                      border: '1px solid var(--ev-green-muted)',
-                      color: 'var(--ev-green-primary)',
-                      fontFamily: 'IBM Plex Mono, monospace',
-                    }}
-                  >
-                    {r.avatar}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div
-                      className="text-sm font-medium truncate"
-                      style={{ color: 'var(--ev-text-primary)' }}
-                    >
-                      {r.name}
-                    </div>
-                    <div className="text-xs truncate" style={{ color: 'var(--ev-text-muted)' }}>
-                      {r.email}
-                    </div>
-                  </div>
-                  <span
-                    className={r.role === 'owner' ? 'ev-badge-active' : 'ev-badge-offline'}
-                    style={{ fontSize: '0.65rem', flexShrink: 0 }}
-                  >
-                    {r.role}
-                  </span>
+                  {experiment.researcher.avatar}
                 </div>
-              ))}
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="text-sm font-medium truncate"
+                    style={{ color: 'var(--ev-text-primary)' }}
+                  >
+                    {experiment.researcher.name}
+                  </div>
+                  <div className="text-xs truncate" style={{ color: 'var(--ev-text-muted)' }}>
+                    {experiment.researcher.email}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

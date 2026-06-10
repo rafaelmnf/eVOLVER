@@ -50,7 +50,7 @@ export interface Experiment {
   endedAt: string | null;
   duration: string;
   slaveIds: string[];
-  researchers: Researcher[];
+  researcher: Researcher;
   alertCount: number;
 }
 
@@ -58,7 +58,6 @@ export interface Researcher {
   id: string;
   name: string;
   email: string;
-  role: 'owner' | 'collaborator';
   avatar: string;
 }
 
@@ -280,11 +279,7 @@ export const mockExperiments: Experiment[] = [
     duration: '18h 24m',
     slaveIds: ['slave-001', 'slave-002', 'slave-006'],
     alertCount: 2,
-    researchers: [
-      { id: 'r1', name: 'Dr. Ana Lima', email: 'ana.lima@lab.br', role: 'owner', avatar: 'AL' },
-      { id: 'r2', name: 'Carlos Mota', email: 'carlos.mota@lab.br', role: 'collaborator', avatar: 'CM' },
-      { id: 'r3', name: 'Beatriz Souza', email: 'beatriz.souza@lab.br', role: 'collaborator', avatar: 'BS' },
-    ],
+    researcher: { id: 'r1', name: 'Dr. Ana Lima', email: 'ana.lima@lab.br', avatar: 'AL' },
   },
   {
     id: 'exp-002',
@@ -296,10 +291,7 @@ export const mockExperiments: Experiment[] = [
     duration: '6h 12m',
     slaveIds: ['slave-003', 'slave-005'],
     alertCount: 0,
-    researchers: [
-      { id: 'r4', name: 'Prof. João Ferreira', email: 'joao.ferreira@lab.br', role: 'owner', avatar: 'JF' },
-      { id: 'r2', name: 'Carlos Mota', email: 'carlos.mota@lab.br', role: 'collaborator', avatar: 'CM' },
-    ],
+    researcher: { id: 'r4', name: 'Prof. João Ferreira', email: 'joao.ferreira@lab.br', avatar: 'JF' },
   },
   {
     id: 'exp-003',
@@ -311,9 +303,7 @@ export const mockExperiments: Experiment[] = [
     duration: '72h 00m',
     slaveIds: [],
     alertCount: 5,
-    researchers: [
-      { id: 'r1', name: 'Dr. Ana Lima', email: 'ana.lima@lab.br', role: 'owner', avatar: 'AL' },
-    ],
+    researcher: { id: 'r1', name: 'Dr. Ana Lima', email: 'ana.lima@lab.br', avatar: 'AL' },
   },
 ];
 
