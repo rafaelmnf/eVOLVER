@@ -51,8 +51,8 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Determine the protocol and host for WebSockets dynamically
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    // Fallback to localhost:3000 if running on Vite dev server (e.g. localhost:5173)
-    const host = window.location.port === "5173" ? "localhost:3000" : window.location.host;
+    // Fallback to the current hostname at port 3000 if running on Vite dev server (e.g. 5173)
+    const host = window.location.port === "5173" ? `${window.location.hostname}:3000` : window.location.host;
     const wsUrl = `${protocol}//${host}`;
 
     console.log(`🔌 [WebSocket client] Connecting to ${wsUrl}...`);
