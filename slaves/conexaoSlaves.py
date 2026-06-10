@@ -13,7 +13,7 @@ ID_CLIENTE = f"rasp_{dna_placa}"
 SSID_WIFI = "eMaster_Rede"
 SENHA_WIFI = "evolver_admin"
 IP_BROKER = "10.42.0.1"
-TOPICO = f"projeto/sensores/{ID_CLIENTE}" 
+TOPICO = f"projeto/sensores/{ID_CLIENTE}" 2
 ARQUIVO_BUFFER = "buffer_dados.txt" # Nome do arquivo que vai guardar os dados offline
 
 # Pinos Analógicos
