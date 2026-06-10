@@ -3,8 +3,8 @@ import time
 import json
 import machine
 import ubinascii
-import os  # <-- NOVA BIBLIOTECA: Gerencia arquivos na memória Flash
-from umqtt.robust import MQTTClient 
+import os
+from umqtt.simple import MQTTClient  # <-- MUDANÇA: Usando a versão Simple para termos controle dos erros
 
 dna_placa = ubinascii.hexlify(machine.unique_id()).decode('utf-8')
 ID_CLIENTE = f"rasp_{dna_placa}"
@@ -13,11 +13,14 @@ ID_CLIENTE = f"rasp_{dna_placa}"
 SSID_WIFI = "eMaster_Rede"
 SENHA_WIFI = "evolver_admin"
 IP_BROKER = "10.42.0.1"
-TOPICO = f"projeto/sensores/{ID_CLIENTE}" 
-ARQUIVO_BUFFER = "buffer_dados.txt" # Nome do arquivo que vai guardar os dados offline
+TOPICO = f"projeto/sensores/{ID_CLIENTE}"
+ARQUIVO_BUFFER = "buffer_dados.txt"
+
+# Pausa de inicialização para estabilizar o chip Wi-Fi na tomada
+time.sleep(2)
 
 # Pinos Analógicos
-sensor_temp = machine.ADC(26) 
+sensor_temp = machine.ADC(26)
 sensor_densidade = machine.ADC(27)
 
 # --- 1. CONECTANDO AO WI-FI ---
@@ -32,85 +35,98 @@ def conectar_wifi():
 
 conectar_wifi()
 
-# --- 2. CONECTANDO AO BROKER MQTT ---
+# --- 2. GERENCIADOR DE CONEXÃO MQTT ---
 cliente_mqtt = MQTTClient(ID_CLIENTE, IP_BROKER)
-cliente_mqtt.connect() 
-print("✅ Conectado ao Broker MQTT (Modo Robusto)!")
 
-# --- 3. FUNÇÕES DE BLINDAGEM (BUFFER LOCAL) ---
-def salvar_no_buffer(dado_json):
-    """Abre o arquivo, pula para a última linha, escreve o dado e fecha."""
+def tentar_conectar_mqtt():
+    """Tenta conectar ao Broker de forma limpa. Retorna True se conseguir e False se falhar."""
     try:
-        # O parâmetro 'a' (Append) garante que não vamos apagar os dados anteriores
+        cliente_mqtt.connect()
+        print("✅ Conectado ao Broker MQTT!")
+        return True
+    except Exception as e:
+        print(f"❌ Falha ao conectar no Broker: {e}")
+        return False
+
+# Primeira tentativa antes de entrar no loop
+conectado_mqtt = tentar_conectar_mqtt()
+
+# --- 3. FUNÇÕES DE BUFFER LOCAL ---
+def salvar_no_buffer(dado_json):
+    """Guarda o dado com segurança na Flash se o Broker estiver offline."""
+    try:
         with open(ARQUIVO_BUFFER, 'a') as arquivo:
             arquivo.write(dado_json + '\n')
         print(f"💾 Salvo na Flash: {dado_json}")
     except Exception as e:
-        print(f"❌ Erro fatal na memória Flash: {e}")
+        print(f"❌ Erro físico na memória Flash: {e}")
 
 def enviar_buffer_acumulado():
-    """Lê todos os dados atrasados, envia para a Master e apaga o arquivo."""
+    """Lê os dados acumulados, envia e limpa o arquivo apenas se tudo der certo."""
     try:
-        # Tenta checar se o arquivo existe. Se der erro, ele não existe (não tem dados atrasados)
-        try:
-            os.stat(ARQUIVO_BUFFER)
-        except OSError:
-            return 
-            
-        print("🔄 Conexão estável! Esvaziando buffer de dados atrasados...")
-        
-        # Modo 'r' (Read) para ler o arquivo inteiro
-        with open(ARQUIVO_BUFFER, 'r') as arquivo:
-            linhas = arquivo.readlines()
+        os.stat(ARQUIVO_BUFFER)
+    except OSError:
+        return # Sem dados acumulados, sai da função
 
-        if linhas:
-            for linha in linhas:
-                dado = linha.strip() # Tira os espaços em branco e o "Enter" invisível
-                if dado:
-                    # Envia o dado antigo para o Broker
-                    cliente_mqtt.publish(TOPICO.encode('utf-8'), dado.encode('utf-8'), qos=1)
-                    time.sleep(0.1) # Uma pausa mínima para não "engasgar" o Broker enviando 100 mensagens de uma vez só
-            
-            print(f"✅ {len(linhas)} pacotes atrasados foram enviados com sucesso!")
-        
-        # A Mágica do Espaço: Exclui o arquivo físico da memória Flash
-        os.remove(ARQUIVO_BUFFER)
-        print("🗑️ Buffer apagado. Espaço na Flash 100% liberado.")
+    print("🔄 Conexão restabelecida! Descarregando buffer offline...")
 
-    except Exception as e:
-        print(f"⚠️ Erro ao tentar esvaziar o buffer: {e}")
+    with open(ARQUIVO_BUFFER, 'r') as arquivo:
+        linhas = arquivo.readlines()
+
+    if linhas:
+        for linha in linhas:
+            dado = linha.strip()
+            if dado:
+                # Se a conexão cair no MEIO do descarregamento do buffer,
+                # o erro vai estourar aqui e interromper a função imediatamente,
+                # impedindo que o arquivo seja apagado antes da hora.
+                cliente_mqtt.publish(TOPICO.encode('utf-8'), dado.encode('utf-8'), qos=1)
+                time.sleep(0.1)
+
+        print(f"✅ {len(linhas)} pacotes antigos enviados com sucesso!")
+
+    os.remove(ARQUIVO_BUFFER)
+    print("🗑️ Memória Flash limpa e liberada.")
 
 
-# --- 4. LOOP INFINITO DE COLETA E ENVIO ---
+# --- 4. LOOP PRINCIPAL COM MÁQUINA DE ESTADOS ---
 while True:
     try:
         leitura_t = sensor_temp.read_u16()
         leitura_d = sensor_densidade.read_u16()
 
-        temperatura_real = (leitura_t / 65535.0) * 100 
+        temperatura_real = (leitura_t / 65535.0) * 100
         densidade_real = (leitura_d / 65535.0) * 5
-        
+
         dados = {
             "temp": round(temperatura_real, 2),
             "densidade": round(densidade_real, 2)
         }
         carga_json = json.dumps(dados)
-        
-        # PASSO A: Tenta enviar o que estiver atrasado no "HD" primeiro
-        enviar_buffer_acumulado()
 
-        # PASSO B: Envia a leitura atual do segundo
-        cliente_mqtt.publish(TOPICO.encode('utf-8'), carga_json.encode('utf-8'), qos=1) 
-        print(f"📤 Enviado (QoS 1): {carga_json}")
-        
-        # Mudar para uma variavel futuramente para modifcar de 20s a 200s 
-        time.sleep(5)
-        
-    except Exception as e:
-        # PASSO C: Se a internet cair ou o MQTT for desconectado, o erro estoura aqui!
-        # O try/except "amortece" a queda, e nós mandamos a leitura atual para a gaveta.
-        print(f"⚠️ Falha de envio detectada: {e}")
+        # Se no ciclo passado nós perdemos a conexão, tenta reconectar agora
+        if not conectado_mqtt:
+            print("🔄 Tentando restabelecer comunicação com o Broker...")
+            conectado_mqtt = tentar_conectar_mqtt()
+
+        # Se estamos conectados (ou se a reconexão acima funcionou)
+        if conectado_mqtt:
+            # Envia primeiro o que ficou guardado no "HD"
+            enviar_buffer_acumulado()
+
+            # Envia o dado atual do sensor
+            cliente_mqtt.publish(TOPICO.encode('utf-8'), carga_json.encode('utf-8'), qos=1)
+            print(f"📤 Enviado em Tempo Real: {carga_json}")
+            time.sleep(5)
+        else:
+            # Se a tentativa de reconexão falhou, armazena direto na Flash
+            print("⚠️ Sistema operando Offline.")
+            salvar_no_buffer(carga_json)
+            time.sleep(5) # Mantém o ritmo de amostragem de 5 em 5 segundos
+
+    except OSError as e:
+        # Qualquer queda de conexão ou erro de rede vai cair EXATAMENTE aqui
+        print(f"⚠️ Alerta de Hardware: Conexão com o Broker perdida ({e})")
+        conectado_mqtt = False
         salvar_no_buffer(carga_json)
-        
-        # O umqtt.robust vai tentar se reconectar sozinho nos bastidores durante esta pausa
         time.sleep(2)
