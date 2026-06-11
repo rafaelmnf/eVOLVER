@@ -159,11 +159,13 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div>
-                      <div className="ev-label mb-0.5">Researchers</div>
+                      <div className="ev-label mb-0.5">Researcher</div>
                       <div
+                        className="truncate max-w-[120px]"
                         style={{ fontFamily: 'IBM Plex Mono, monospace', color: 'var(--ev-text-secondary)' }}
+                        title={exp.researcher.name}
                       >
-                        {exp.researchers.length}
+                        {exp.researcher.name}
                       </div>
                     </div>
                     {exp.alertCount > 0 && (
@@ -179,23 +181,23 @@ export default function Dashboard() {
                   </div>
 
                   <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: '1px solid var(--ev-border-subtle)' }}>
-                    <div className="flex -space-x-1">
-                      {exp.researchers.slice(0, 3).map(r => (
-                        <div
-                          key={r.id}
-                          className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                          style={{
-                            backgroundColor: 'var(--ev-green-dim)',
-                            border: '1px solid var(--ev-green-muted)',
-                            color: 'var(--ev-green-primary)',
-                            fontFamily: 'IBM Plex Mono, monospace',
-                            fontSize: '0.6rem',
-                          }}
-                          title={r.name}
-                        >
-                          {r.avatar}
-                        </div>
-                      ))}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                        style={{
+                          backgroundColor: 'var(--ev-green-dim)',
+                          border: '1px solid var(--ev-green-muted)',
+                          color: 'var(--ev-green-primary)',
+                          fontFamily: 'IBM Plex Mono, monospace',
+                          fontSize: '0.6rem',
+                        }}
+                        title={exp.researcher.name}
+                      >
+                        {exp.researcher.avatar}
+                      </div>
+                      <span className="text-xs truncate" style={{ color: 'var(--ev-text-muted)', fontFamily: 'Space Grotesk, monospace' }}>
+                        {exp.researcher.name}
+                      </span>
                     </div>
                     <span
                       className="text-xs flex items-center gap-1"
