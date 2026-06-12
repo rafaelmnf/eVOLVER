@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: evolver-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: evolver_admin
+      POSTGRES_PASSWORD: ralurera
+      POSTGRES_DB: evolver
+    ports:
+      - "5433:5432" #Tive que alterar a porta do PC para 5433, pois a 5432 estava sendo usada pelo postgres local.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/src/config/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U evolver_admin -d evolver" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: evolver-influxdb
+    restart: always
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=evolver_admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=ralurera
+      - DOCKER_INFLUXDB_INIT_ORG=evolver_org
+      - DOCKER_INFLUXDB_INIT_BUCKET=evolver
+      - DOCKER_INFLUXDB_INIT_RETENTION=30d
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=evolver-super-secret-admin-token-123456
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8086/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  influxdb_data:

@@ -80,7 +80,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
           const message = JSON.parse(event.data);
 
           // Atualiza o estado com novos dados
-          
+
           if (message.type === "MQTT_READING") { // // Isso é importante porque no  futuro você poderia ter outros tipos de mensagens passando pelo mesmo cabo (como "SYSTEM_ALERT", "CHAT_MESSAGE", etc)
             const { origem, temp, densidade, timestamp } = message.data;
 
@@ -96,7 +96,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
             }
 
             const currentSlaves = slavesRef.current;
-            const index = currentSlaves.findIndex((s) => 
+            const index = currentSlaves.findIndex((s) =>
               s.id.toLowerCase() === origem.toLowerCase() ||
               s.hostname.toLowerCase() === origem.toLowerCase() ||
               s.hostname.toLowerCase().includes(origem.toLowerCase()) ||
@@ -150,6 +150,8 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                 }
               };
 
+              // Toda vez que o WebSocket chama setSlaves, o React detecta que o estado mudou
+              // e redesenha na hora apenas os gráficos e os cards na tela do usuário com os valores atualizados
               setSlaves((prev) => [...prev, newSlave]);
 
               if (isWarning) {
