@@ -1,68 +1,80 @@
-## Projeto Desenvolvido pelos alunos da PUC Campinas: 
-- Lucas Espica Rezende 
+# eVOLVER — Monitoramento de Biorreatores
+
+Projeto desenvolvido pelos alunos da PUC Campinas:
+- Lucas Espica Rezende
 - Rafael Martiniano Nogueira Filho
 - Renato Hildebrand Pissinatti
 
-Link da estruturação do projeto: https://www.figma.com/board/e9ZoAOv3ZKa40s7hnpTEbT/eVOLVER?node-id=19-725&t=7BpRwDXWFm8qj7tB-0
+🔗 [Link da estruturação do projeto no Figma](https://www.figma.com/board/e9ZoAOv3ZKa40s7hnpTEbT/eVOLVER?node-id=19-725&t=7BpRwDXWFm8qj7tB-0)
 
-## Como rodar o projeto:
-Este projeto foi configurado utilizando o pnpm como gerenciador de pacotes devido à velocidade e eficiência em monorepos/estruturas híbridas.
+---
 
-1. Certifique-se de ter o Node.js instalado.
-2. Caso ainda não tenha o pnpm instalado globalmente, instale-o rodando o comando abaixo no seu terminal:
-`npm install -g pnpm`
+## 🛠️ Arquitetura do Projeto
 
-3. Navegue até a pasta raiz do projeto (eVOLVER) no seu terminal e execute:
-`pnpm install`
-4. Rode no terminal:
-`pnpm run dev`
+O projeto é estruturado como um monorepo contendo os seguintes componentes:
 
-## eVOLVER — Design Brainstorm
+*   **`frontend/`:** Painel de controle desenvolvido em **React + Vite**, com gráficos em tempo real utilizando **Recharts**, ícones com **Lucide React** e estilo visual escuro personalizado.
+*   **`backend/`:** Servidor **Node.js (Express + TypeScript)** que atua como ponte de dados. Contém:
+    *   Cliente **MQTT** para receber telemetria enviada pelas Raspberry Pi Pico 2.
+    *   Servidor **WebSocket** para distribuir dados em tempo real para os navegadores dos clientes conectados.
+*   **`shared/`:** Constantes e configurações compartilhadas entre frontend e backend.
 
-### Ideia Principal
-Plataforma científica de monitoramento de biorreatores. Público: pesquisadores, biólogos, engenheiros.
-Tema obrigatório: dark científico, verde/preto, sensação de terminal de laboratório ativo.
+### 📊 Banco de Dados (Arquitetura Híbrida)
+*   **PostgreSQL (Relacional):** Responsável pelo controle de metadados como usuários (pesquisadores), experimentos, nós masters, nós slaves, alertas e configurações/limites de sensores.
+*   **InfluxDB (Séries Temporais):** Responsável por armazenar de forma otimizada o fluxo de alta frequência de dados dos sensores (temperatura, densidade ótica e rotação/agitação).
 
-Tema do Projeto — "Bioluminescence"
+---
 
-**Design Movement:** Dark Scientific Editorial — terminal de missão espacial com vida orgânica
+## 🚀 Como Rodar o Projeto
 
-**Core Principles:**
-- Dados vivos: a interface reflete que os biorreatores são organismos ativos
-- Hierarquia luminosa: elementos mais importantes têm mais brilho (glow)
-- Layout sidebar + conteúdo principal com grid fluido de cards
-- Precisão técnica sem frieza — bordas finas, espaçamento generoso
+### Pré-requisitos
+Certifique-se de ter instalado em sua máquina:
+1.  [Node.js](https://nodejs.org/) (Versão LTS recomendada)
+2.  [pnpm](https://pnpm.io/) (Gerenciador de pacotes) - `npm install -g pnpm`
+3.  [Docker Desktop](https://www.docker.com/products/docker-desktop/) rodando na máquina.
 
-**Color Philosophy:**
-- Fundo #0a0f0a como substrato de laboratório — preto com leve matiz verde
-- Verde #1db954 como bioluminescência — os organismos emitem luz
-- Glow verde rgba(29,185,84,0.15) como halo ao redor de elementos vivos
-- Texto #e8f5e8 levemente esverdeado — até o texto respira o ambiente
+---
 
-**Layout Paradigm:**
-- Sidebar fixa esquerda (260px) com logo, nav e status do sistema
-- Área principal com padding generoso, grid responsivo de cards
-- Painel de alertas como drawer lateral direito
-- Breadcrumb + header por página com status do experimento ativo
+### Passo 1: Subir os Bancos de Dados (Docker)
+Na pasta raiz do projeto, execute o comando abaixo para baixar e iniciar os contêineres do PostgreSQL e InfluxDB em segundo plano:
+```bash
+docker compose up -d
+```
+*   O PostgreSQL estará acessível localmente na porta **`5433`** (mapeada para evitar conflitos com instalações locais).
+*   O InfluxDB estará acessível localmente na porta **`8086`** (possui painel visual em http://localhost:8086/).
 
-**Signature Elements:**
-- Dot-grid no fundo: pontos verdes em rgba(29,185,84,0.04) a cada 24px
-- Cards com glow verde suave ao hover: box-shadow 0 0 20px rgba(29,185,84,0.15)
-- Pulse animation em sensores ativos — como batimento cardíaco
+---
 
-**Interaction Philosophy:**
-- Hover ilumina — elementos ganham brilho ao receber foco
-- Dados em tempo real com counter animation suave
-- Alertas urgentes pulsam para chamar atenção sem interromper fluxo
+### Passo 2: Instalar Dependências
+Na raiz do projeto, instale as dependências de todos os pacotes executando:
+```bash
+pnpm install
+```
 
-**Animation:**
-- @keyframes pulse-green: scale 1→1.02, opacity 0.8→1, 2s ease-in-out infinite
-- Fade-in stagger nos cards: translateY(8px)→0, opacity 0→1, 50ms delay
-- Gráficos com stroke-dashoffset animation ao carregar
-- Novos alertas: slide-in-right 300ms ease-out
+---
 
-**Typography System:**
-- Display: Space Grotesk 600/700 — títulos, nomes de dispositivo, seções
-- Data: IBM Plex Mono 400/500 — todos os valores numéricos, timestamps, IDs
-- Body: DM Sans 400/500 — labels, descrições, textos de suporte
-- Métricas: 3rem+, IBM Plex Mono, cor verde primária
+### Passo 3: Executar a Aplicação (Desenvolvimento)
+Execute o comando abaixo para iniciar simultaneamente o frontend e o backend em modo de desenvolvimento:
+```bash
+pnpm run dev
+```
+*   **Frontend (Vite):** http://localhost:5173/
+*   **Backend (API + WebSocket + MQTT):** http://localhost:3000/
+
+
+## 🎨 Design Brainstorm — "Bioluminescence"
+
+### Princípios de Estilo
+*   **Dados vivos:** A interface reflete que os biorreatores são organismos ativos e dinâmicos.
+*   **Hierarquia luminosa:** Elementos críticos ou ativos possuem brilho (*glow*) e animações suaves (*pulse*).
+*   **Layout:** Sidebar fixa à esquerda (navegação), área principal fluida com grids de sensores, e gaveta de alertas à direita.
+
+### Cores Principais
+*   **Fundo (#0a0f0a):** Preto profundo com leve matiz verde, simulando um substrato de laboratório.
+*   **Verde Primário (#1db954):** Brilho bioluminescente representando organismos ativos.
+*   **Glow verde:** Sombras e halos suaves (`rgba(29, 185, 84, 0.15)`).
+
+### Tipografia
+*   **Títulos/Seções:** *Space Grotesk* (Peso 600/700) - visual moderno e futurista.
+*   **Valores Numéricos/IDs/Timestamps:** *IBM Plex Mono* (Peso 400/500) - terminal técnico preciso.
+*   **Textos/Descrições:** *DM Sans* (Peso 400/500) - leitura confortável.
