@@ -1,5 +1,6 @@
 import { Server as HTTPServer } from "http";
 import { WebSocketServer as WSServer, WebSocket } from "ws";
+import { query } from "./db";
 
 // Criamos o WebSocketService (websocket.ts) para enviar essas leituras aos clientes Web em tempo real.
 export class WebSocketService {
@@ -21,6 +22,35 @@ export class WebSocketService {
 
       // Optional: send connection confirmation to client
       ws.send(JSON.stringify({ type: "SYSTEM", message: "CONNECTED_TO_MASTER" }));
+
+      // Fetch all slaves from database and send to client
+      query("SELECT id, master_id, experiment_id, hostname, ip, status, last_seen FROM slaves ORDER BY created_at ASC")
+        .then((result) => {
+          const dbSlaves = result.rows;
+          const slaves = dbSlaves.map((slave) => ({
+            id: slave.id,
+            hostname: slave.hostname,
+            ip: slave.ip,
+            status: slave.status,
+            lastSeen: slave.last_seen ? slave.last_seen.toISOString() : new Date().toISOString(),
+            experimentId: slave.experiment_id,
+            alertCount: 0,
+            sensors: {
+              temperature: { value: 0, unit: "°C", trend: "stable", trendDelta: 0, quality: slave.status === "offline" ? "error" : "excellent", history: [] },
+              ph: { value: 7.0, unit: "pH", trend: "stable", trendDelta: 0, quality: slave.status === "offline" ? "error" : "excellent", history: [] },
+              od: { value: 0, unit: "OD600", trend: "stable", trendDelta: 0, quality: slave.status === "offline" ? "error" : "excellent", history: [] },
+              agitation: { value: 0, unit: "RPM", trend: "stable", trendDelta: 0, quality: slave.status === "offline" ? "error" : "excellent", history: [] },
+            },
+          }));
+
+          ws.send(JSON.stringify({
+            type: "INITIAL_SLAVES",
+            data: slaves,
+          }));
+        })
+        .catch((err) => {
+          console.error("❌ [WebSocket Service] Error fetching initial slaves from DB:", err);
+        });
 
       // Ouve o evento "close" e realiza a ação
       ws.on("close", () => {
