@@ -1,6 +1,7 @@
 import { Server as HTTPServer } from "http";
 import { WebSocketServer as WSServer, WebSocket } from "ws";
 import { query } from "./db";
+import { getSensorHistory } from "./influx";
 
 // Criamos o WebSocketService (websocket.ts) para enviar essas leituras aos clientes Web em tempo real.
 export class WebSocketService {
@@ -25,23 +26,66 @@ export class WebSocketService {
 
       // Fetch all slaves from database and send to client
       query("SELECT id, master_id, experiment_id, hostname, ip, status, last_seen FROM slaves ORDER BY created_at ASC")
-        .then((result) => {
+        .then(async (result) => {
           const dbSlaves = result.rows;
-          const slaves = dbSlaves.map((slave) => ({
-            id: slave.id,
-            hostname: slave.hostname,
-            ip: slave.ip,
-            status: slave.status,
-            lastSeen: slave.last_seen ? slave.last_seen.toISOString() : new Date().toISOString(),
-            experimentId: slave.experiment_id,
-            alertCount: 0,
-            sensors: {
-              temperature: { value: 0, unit: "°C", trend: "stable", trendDelta: 0, quality: slave.status === "offline" ? "error" : "excellent", history: [] },
-              ph: { value: 7.0, unit: "pH", trend: "stable", trendDelta: 0, quality: slave.status === "offline" ? "error" : "excellent", history: [] },
-              od: { value: 0, unit: "OD600", trend: "stable", trendDelta: 0, quality: slave.status === "offline" ? "error" : "excellent", history: [] },
-              agitation: { value: 0, unit: "RPM", trend: "stable", trendDelta: 0, quality: slave.status === "offline" ? "error" : "excellent", history: [] },
-            },
-          }));
+          const slaves = await Promise.all(
+            dbSlaves.map(async (slave) => {
+              // Fetch history from InfluxDB
+              const history = await getSensorHistory(slave.hostname);
+              
+              // Get last known sensor values from history if available
+              const lastTemp = history.temperature.length > 0 
+                ? history.temperature[history.temperature.length - 1].value 
+                : 0;
+              const lastOD = history.od.length > 0 
+                ? history.od[history.od.length - 1].value 
+                : 0;
+
+              return {
+                id: slave.id,
+                hostname: slave.hostname,
+                ip: slave.ip,
+                status: slave.status,
+                lastSeen: slave.last_seen ? slave.last_seen.toISOString() : new Date().toISOString(),
+                experimentId: slave.experiment_id,
+                alertCount: 0,
+                sensors: {
+                  temperature: { 
+                    value: lastTemp, 
+                    unit: "°C", 
+                    trend: "stable", 
+                    trendDelta: 0, 
+                    quality: slave.status === "offline" ? "error" : "excellent", 
+                    history: history.temperature.map(p => p.value) 
+                  },
+                  ph: { 
+                    value: 7.0, 
+                    unit: "pH", 
+                    trend: "stable", 
+                    trendDelta: 0, 
+                    quality: slave.status === "offline" ? "error" : "excellent", 
+                    history: Array(history.temperature.length).fill(7.0) 
+                  },
+                  od: { 
+                    value: lastOD, 
+                    unit: "OD600", 
+                    trend: "stable", 
+                    trendDelta: 0, 
+                    quality: slave.status === "offline" ? "error" : "excellent", 
+                    history: history.od.map(p => p.value) 
+                  },
+                  agitation: { 
+                    value: 200, 
+                    unit: "RPM", 
+                    trend: "stable", 
+                    trendDelta: 0, 
+                    quality: slave.status === "offline" ? "error" : "excellent", 
+                    history: Array(history.temperature.length).fill(200) 
+                  },
+                },
+              };
+            })
+          );
 
           ws.send(JSON.stringify({
             type: "INITIAL_SLAVES",

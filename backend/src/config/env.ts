@@ -21,4 +21,9 @@ export const config = {
   dbHost: process.env.PGHOST || "localhost",
   dbPort: parseInt(process.env.PGPORT || "5433", 10),
   dbName: process.env.PGDATABASE || "evolver",
+  // InfluxDB Configuration
+  influxUrl: process.env.INFLUX_URL || "http://localhost:8086",
+  influxToken: process.env.INFLUX_TOKEN || "evolver-super-secret-admin-token-123456",
+  influxOrg: process.env.INFLUX_ORG || "evolver_org",
+  influxBucket: process.env.INFLUX_BUCKET || "evolver",
 };
