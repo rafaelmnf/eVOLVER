@@ -18,6 +18,7 @@ export class MQTTService extends EventEmitter {
     this.client.on("connect", () => {
       console.log("✅ [MQTT Service] Connected to Broker MQTT!");
       this.lastErrorMsg = null;
+      this.emit("status", "active");
 
       // Escuta o tópico
       this.client?.subscribe(this.topic, (err) => {
@@ -61,11 +62,20 @@ export class MQTTService extends EventEmitter {
       }
     });
 
+    this.client.on("offline", () => {
+      this.emit("status", "offline");
+    });
+
+    this.client.on("close", () => {
+      this.emit("status", "offline");
+    });
+
     this.client.on("error", (err) => {
       if (err.message !== this.lastErrorMsg) {
         console.error("❌ [MQTT Service] Connection error:", err.message);
         this.lastErrorMsg = err.message;
       }
+      this.emit("status", "offline");
     });
   }
 }

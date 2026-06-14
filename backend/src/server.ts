@@ -14,10 +14,66 @@ async function startServer() {
   const wsService = new WebSocketService(server);
   const mqttService = new MQTTService();
 
+  // Seed/ensure Master exists in PostgreSQL database
+  try {
+    await query(`
+      INSERT INTO masters (hostname, ip, status)
+      VALUES ('eMaster', '10.42.0.1', 'offline')
+      ON CONFLICT (hostname) DO NOTHING
+    `);
+    console.log("✅ [Database Seed] eMaster ensured in PostgreSQL.");
+  } catch (err) {
+    console.error("❌ [Database Seed] Error seeding eMaster:", err);
+  }
+
+  let lastMqttStatus: string | null = null;
+
+  // Monitor MQTT connection status and update master/slaves status in DB & frontend
+  mqttService.on("status", async (status) => {
+    if (status === lastMqttStatus) return; // Ignore duplicate events
+    lastMqttStatus = status;
+
+    try {
+      console.log(`🔌 [MQTT Service] Status changed to: ${status}`);
+
+      // 1. Update Master status in PostgreSQL
+      await query(
+        `UPDATE masters 
+         SET status = $1::device_status, 
+             online_since = CASE WHEN $1::device_status = 'active'::device_status THEN NOW() ELSE online_since END,
+             last_sync = NOW()
+         WHERE hostname = 'eMaster'`,
+        [status]
+      );
+
+      // 2. If master is offline, set all slaves to offline in the database
+      if (status === "offline") {
+        await query(
+          `UPDATE slaves 
+           SET status = 'offline'`
+        );
+        console.log("🔌 [MQTT Service] Set all slaves to offline in DB due to Master disconnection.");
+      }
+
+      // 3. Broadcast master status update to all connected frontend clients
+      wsService.broadcast({
+        type: "MASTER_STATUS_UPDATE",
+        data: {
+          hostname: "eMaster",
+          status,
+          slavesOffline: status === "offline",
+        },
+      });
+    } catch (error) {
+      console.error("❌ [Database Error] Error updating master status:", error);
+    }
+  });
+
   /* Aqui interliga os dois serviços: 
      Ao criar um objeto mqttService, ele vem com o EventEmitter. Aqui ele usa dela para ouvir o alerta reading emitido ao receber os dados
      das raspberrys e repassa esse data usando a função criada broadcast para o frontend
   */ 
+
   mqttService.on("reading", async (data) => {
     try {
       // 1. Send data to InfluxDB

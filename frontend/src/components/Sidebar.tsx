@@ -31,6 +31,7 @@ export default function Sidebar() {
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
   const { slaves, alerts, master, isConnected } = useLiveData();
+  const isMasterOnline = isConnected && master.status === 'active';
 
   const activeSlaves = slaves.filter(s => s.status === 'active').length;
   const offlineSlaves = slaves.filter(s => s.status === 'offline').length;
@@ -78,12 +79,12 @@ export default function Sidebar() {
         <div className="ev-card p-3 rounded" style={{ backgroundColor: 'var(--ev-bg-card)' }}>
           <div className="flex items-center justify-between mb-2">
             <span className="ev-label">Master Node</span>
-            <span className="ev-badge-active flex items-center gap-1" style={{ borderColor: isConnected ? 'var(--ev-green-muted)' : 'var(--ev-border-default)', backgroundColor: isConnected ? 'var(--ev-green-dim)' : 'var(--ev-bg-elevated)' }}>
+            <span className="ev-badge-active flex items-center gap-1" style={{ borderColor: isMasterOnline ? 'var(--ev-green-muted)' : 'var(--ev-border-default)', backgroundColor: isMasterOnline ? 'var(--ev-green-dim)' : 'var(--ev-bg-elevated)' }}>
               <span
                 className="w-1.5 h-1.5 rounded-full inline-block animate-pulse-dot"
-                style={{ backgroundColor: isConnected ? 'var(--ev-green-primary)' : '#d4a017' }}
+                style={{ backgroundColor: isMasterOnline ? 'var(--ev-green-primary)' : '#d4a017' }}
               />
-              {isConnected ? 'Online' : 'Offline'}
+              {isMasterOnline ? 'Online' : 'Offline'}
             </span>
           </div>
           <div
@@ -208,7 +209,7 @@ export default function Sidebar() {
           </button>
         </div>
         <div className="text-[0.65rem] flex justify-between mt-2 pt-2 border-t" style={{ borderColor: 'var(--ev-border-subtle)', color: 'var(--ev-text-muted)', fontFamily: 'IBM Plex Mono, monospace' }}>
-          <span>eVOLVER v2.4.1</span>
+          <span>eVOLVER v0.0.0</span>
           <span>© 2026 Lab Systems</span>
         </div>
       </div>

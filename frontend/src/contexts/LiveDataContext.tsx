@@ -24,8 +24,8 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [master, setMaster] = useState<RaspberryMaster>({
     id: "master-001",
-    hostname: "evolver-master",
-    ip: "192.168.1.10",
+    hostname: "eMaster",
+    ip: "10.42.0.1",
     status: "offline",
     slaves: [],
     uptime: "0d 0h 0m",
@@ -80,6 +80,56 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
           const message = JSON.parse(event.data);
 
           // Atualiza o estado com novos dados
+          if (message.type === "INITIAL_MASTER") {
+            const { hostname, ip, status, lastSync } = message.data;
+            setMaster((prev) => ({
+              ...prev,
+              hostname,
+              ip,
+              status,
+              lastSync: lastSync || prev.lastSync,
+            }));
+            
+            if (status === "offline") {
+              setSlaves((prevSlaves) =>
+                prevSlaves.map((s) => ({
+                  ...s,
+                  status: "offline",
+                  sensors: {
+                    temperature: { ...s.sensors.temperature, quality: "error" as const, value: 0 },
+                    ph: { ...s.sensors.ph, quality: "error" as const, value: 7.0 },
+                    od: { ...s.sensors.od, quality: "error" as const, value: 0 },
+                    agitation: { ...s.sensors.agitation, quality: "error" as const, value: 0 },
+                  },
+                }))
+              );
+            }
+          }
+
+          if (message.type === "MASTER_STATUS_UPDATE") {
+            const { hostname, status, slavesOffline } = message.data;
+            setMaster((prev) => ({
+              ...prev,
+              status,
+              lastSync: new Date().toISOString(),
+            }));
+
+            if (slavesOffline || status === "offline") {
+              setSlaves((prevSlaves) =>
+                prevSlaves.map((s) => ({
+                  ...s,
+                  status: "offline",
+                  sensors: {
+                    temperature: { ...s.sensors.temperature, quality: "error" as const, value: 0 },
+                    ph: { ...s.sensors.ph, quality: "error" as const, value: 7.0 },
+                    od: { ...s.sensors.od, quality: "error" as const, value: 0 },
+                    agitation: { ...s.sensors.agitation, quality: "error" as const, value: 0 },
+                  },
+                }))
+              );
+            }
+          }
+
           if (message.type === "INITIAL_SLAVES") {
             setSlaves(message.data);
             

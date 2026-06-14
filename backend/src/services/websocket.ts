@@ -24,6 +24,24 @@ export class WebSocketService {
       // Optional: send connection confirmation to client
       ws.send(JSON.stringify({ type: "SYSTEM", message: "CONNECTED_TO_MASTER" }));
 
+      // Fetch master status from database and send to client
+      query("SELECT hostname, ip, status, last_sync FROM masters WHERE hostname = 'eMaster'")
+        .then((result) => {
+          const dbMaster = result.rows[0];
+          ws.send(JSON.stringify({
+            type: "INITIAL_MASTER",
+            data: {
+              hostname: dbMaster ? dbMaster.hostname : "eMaster",
+              ip: dbMaster ? dbMaster.ip : "10.42.0.1",
+              status: dbMaster ? dbMaster.status : "offline",
+              lastSync: dbMaster && dbMaster.last_sync ? dbMaster.last_sync.toISOString() : "",
+            }
+          }));
+        })
+        .catch((err) => {
+          console.error("❌ [WebSocket Service] Error fetching initial master from DB:", err);
+        });
+
       // Fetch all slaves from database and send to client
       query("SELECT id, master_id, experiment_id, hostname, ip, status, last_seen FROM slaves ORDER BY created_at ASC")
         .then(async (result) => {
