@@ -14,6 +14,7 @@ interface LiveDataContextType {
   master: RaspberryMaster;
   isConnected: boolean;
   resolveAlert: (id: string) => void;
+  deleteExperiment: (id: string) => Promise<void>;
 }
 
 const LiveDataContext = createContext<LiveDataContextType | undefined>(undefined);
@@ -38,6 +39,11 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
     slavesRef.current = slaves;
   }, [slaves]);
 
+  const deleteExperiment = async (id: string) => {
+    await fetch(`/api/experiments/${id}`, { method: "DELETE" });
+    // O broadcast EXPERIMENT_DELETED via WebSocket atualiza o estado
+  };
+
   const resolveAlert = (id: string) => {
     setAlerts((prev) =>
       prev.map((a) =>
@@ -49,16 +55,11 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // Determine the protocol and host for WebSockets dynamically
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    // Fallback to the current hostname at port 3000 if running on Vite dev server (e.g. 5173)
     const host = window.location.port === "5173" ? `${window.location.hostname}:3000` : window.location.host;
     const wsUrl = `${protocol}//${host}`;
 
     console.log(`🔌 [WebSocket client] Connecting to ${wsUrl}...`);
-    // Código monta a URL e "disca" para o servidor com o wsUrl
-    // O objeto WebSocket é uma API nativa do próprio navegador (Chrome, Edge, etc). 
-    // Ele é o responsável direto por lidar com os pacotes da rede TCP/IP por baixo dos panos.
     let socket = new WebSocket(wsUrl);
 
     const connectWS = () => {
@@ -72,14 +73,10 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
         }));
       };
 
-      // Conecta ao WebSocket
-      // Toda vez que o seu backend dá um ws.send() (ou o broadcast() que vimos antes), o navegador dispara a função onmessage.
       socket.onmessage = (event) => {
         try {
-          // Transforma o JSON em Objeto
           const message = JSON.parse(event.data);
 
-          // Atualiza o estado com novos dados
           if (message.type === "INITIAL_MASTER") {
             const { hostname, ip, status, lastSync } = message.data;
             setMaster((prev) => ({
@@ -89,7 +86,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
               status,
               lastSync: lastSync || prev.lastSync,
             }));
-            
+
             if (status === "offline") {
               setSlaves((prevSlaves) =>
                 prevSlaves.map((s) => ({
@@ -97,7 +94,6 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                   status: "offline",
                   sensors: {
                     temperature: { ...s.sensors.temperature, quality: "error" as const, value: 0 },
-                    ph: { ...s.sensors.ph, quality: "error" as const, value: 7.0 },
                     od: { ...s.sensors.od, quality: "error" as const, value: 0 },
                     agitation: { ...s.sensors.agitation, quality: "error" as const, value: 0 },
                   },
@@ -107,7 +103,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (message.type === "MASTER_STATUS_UPDATE") {
-            const { hostname, status, slavesOffline } = message.data;
+            const { status, slavesOffline } = message.data;
             setMaster((prev) => ({
               ...prev,
               status,
@@ -121,7 +117,6 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                   status: "offline",
                   sensors: {
                     temperature: { ...s.sensors.temperature, quality: "error" as const, value: 0 },
-                    ph: { ...s.sensors.ph, quality: "error" as const, value: 7.0 },
                     od: { ...s.sensors.od, quality: "error" as const, value: 0 },
                     agitation: { ...s.sensors.agitation, quality: "error" as const, value: 0 },
                   },
@@ -132,8 +127,6 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
 
           if (message.type === "INITIAL_SLAVES") {
             setSlaves(message.data);
-            
-            // Add all slave hostnames to the master's slave list
             setMaster((prev) => {
               const hostnames = message.data.map((s: any) => s.hostname);
               return {
@@ -142,6 +135,10 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                 lastSync: new Date().toISOString()
               };
             });
+          }
+
+          if (message.type === "INITIAL_EXPERIMENTS") {
+            setExperiments(message.data);
           }
 
           if (message.type === "SLAVE_STATUS_UPDATE") {
@@ -156,7 +153,6 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                       sensors: status === "offline"
                         ? {
                             temperature: { ...s.sensors.temperature, quality: "error" as const, value: 0 },
-                            ph: { ...s.sensors.ph, quality: "error" as const, value: 7.0 },
                             od: { ...s.sensors.od, quality: "error" as const, value: 0 },
                             agitation: { ...s.sensors.agitation, quality: "error" as const, value: 0 },
                           }
@@ -167,10 +163,67 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
             );
           }
 
-          if (message.type === "MQTT_READING") { // // Isso é importante porque no  futuro você poderia ter outros tipos de mensagens passando pelo mesmo cabo (como "SYSTEM_ALERT", "CHAT_MESSAGE", etc)
-            const { origem, temp, densidade, timestamp, id, status, experimentId } = message.data;
+          if (message.type === "EXPERIMENT_CREATED") {
+            const d = message.data;
+            setExperiments((prev) => {
+              if (prev.some((e) => e.id === d.id)) return prev;
+              return [...prev, {
+                id: d.id,
+                name: d.name,
+                description: d.description || "",
+                status: "running" as const,
+                startedAt: d.startedAt,
+                endedAt: null,
+                duration: "0h 0m",
+                slaveIds: d.slaveIds || [],
+                alertCount: 0,
+                researcher: d.researcher || { id: "", name: "Pesquisador", email: "", avatar: "??" },
+              }];
+            });
+          }
 
-            // Determine threshold warnings
+          if (message.type === "EXPERIMENT_DELETED") {
+            const { id } = message.data;
+            setExperiments((prev) => prev.filter((e) => e.id !== id));
+          }
+
+          if (message.type === "SLAVE_HELLO") {
+            const { id, hostname, ip, timestamp } = message.data;
+            setSlaves((prev) => {
+              const exists = prev.some((s) => s.id === id || s.hostname.toLowerCase() === hostname.toLowerCase());
+              if (exists) {
+                return prev.map((s) =>
+                  s.id === id || s.hostname.toLowerCase() === hostname.toLowerCase()
+                    ? { ...s, status: "idle" as const, lastSeen: timestamp, experimentId: null }
+                    : s
+                );
+              }
+              const newSlave: RaspberrySlave = {
+                id,
+                hostname,
+                ip: ip || "Connected",
+                status: "idle",
+                lastSeen: timestamp,
+                experimentId: null,
+                alertCount: 0,
+                sensors: {
+                  temperature: { value: 0, unit: "°C", trend: "stable", trendDelta: 0, quality: "excellent", history: [] },
+                  od: { value: 0, unit: "OD600", trend: "stable", trendDelta: 0, quality: "excellent", history: [] },
+                  agitation: { value: 0, unit: "RPM", trend: "stable", trendDelta: 0, quality: "excellent", history: [] },
+                },
+              };
+              return [...prev, newSlave];
+            });
+            setMaster((prev) => ({
+              ...prev,
+              slaves: prev.slaves.includes(hostname) ? prev.slaves : [...prev.slaves, hostname],
+              lastSync: new Date().toISOString(),
+            }));
+          }
+
+          if (message.type === "MQTT_READING") {
+            const { origem, temp, densidade, rotacao, timestamp, id, status, experimentId } = message.data;
+
             let isWarning = false;
             let warningMsg = "";
             if (temp > 38.5) {
@@ -210,14 +263,6 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                     quality: isWarning ? "poor" : "excellent",
                     history: [temp]
                   },
-                  ph: {
-                    value: 7.0,
-                    unit: "pH",
-                    trend: "stable",
-                    trendDelta: 0,
-                    quality: "excellent",
-                    history: [7.0]
-                  },
                   od: {
                     value: densidade,
                     unit: "OD600",
@@ -227,18 +272,16 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                     history: [densidade]
                   },
                   agitation: {
-                    value: 200,
+                    value: rotacao ?? 200,
                     unit: "RPM",
                     trend: "stable",
                     trendDelta: 0,
                     quality: "excellent",
-                    history: [200]
+                    history: [rotacao ?? 200]
                   }
                 }
               };
 
-              // Toda vez que o WebSocket chama setSlaves, o React detecta que o estado mudou
-              // e redesenha na hora apenas os gráficos e os cards na tela do usuário com os valores atualizados
               setSlaves((prev) => [...prev, newSlave]);
 
               if (isWarning) {
@@ -277,10 +320,12 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                 const newSlaves = [...prevSlaves];
                 const slave = { ...newSlaves[index] };
 
-                // Update Temperature readings
-                const tempHistory = [...(slave.sensors.temperature.history || [])];
+                // Se o experimentId mudou (slave acabou de entrar num experimento), limpa o histórico
+                const experimentChanged = experimentId !== undefined && experimentId !== slave.experimentId && experimentId !== null;
+
+                // Update Temperature
+                const tempHistory = experimentChanged ? [] : [...(slave.sensors.temperature.history || [])];
                 const prevTemp = tempHistory[tempHistory.length - 1] ?? temp;
-                // empurra valores novos e descartas aqueles depois de 20
                 tempHistory.push(temp);
                 if (tempHistory.length > 20) tempHistory.shift();
 
@@ -290,15 +335,14 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                     ...slave.sensors.temperature,
                     value: temp,
                     history: tempHistory,
-                    // trend é para comparar a temperatura atual com a anterior para deixar a seta para cima/baixo
                     trend: temp > prevTemp ? "up" : temp < prevTemp ? "down" : "stable",
                     trendDelta: parseFloat((temp - prevTemp).toFixed(2)),
                     quality: isWarning ? "poor" : "excellent"
                   }
                 };
 
-                // Update Optical Density (OD) readings
-                const odHistory = [...(slave.sensors.od.history || [])];
+                // Update OD
+                const odHistory = experimentChanged ? [] : [...(slave.sensors.od.history || [])];
                 const prevOD = odHistory[odHistory.length - 1] ?? densidade;
                 odHistory.push(densidade);
                 if (odHistory.length > 20) odHistory.shift();
@@ -312,20 +356,32 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                   quality: "excellent"
                 };
 
-                // Update general slave states
+                // Update Agitation (rotacao)
+                if (rotacao !== undefined) {
+                  const rpmHistory = experimentChanged ? [] : [...(slave.sensors.agitation.history || [])];
+                  const prevRpm = rpmHistory[rpmHistory.length - 1] ?? rotacao;
+                  rpmHistory.push(rotacao);
+                  if (rpmHistory.length > 20) rpmHistory.shift();
+                  slave.sensors.agitation = {
+                    ...slave.sensors.agitation,
+                    value: rotacao,
+                    history: rpmHistory,
+                    trend: rotacao > prevRpm ? "up" : rotacao < prevRpm ? "down" : "stable",
+                    trendDelta: parseFloat((rotacao - prevRpm).toFixed(1)),
+                    quality: "excellent"
+                  };
+                }
+
                 slave.lastSeen = timestamp;
                 slave.status = status || (isWarning ? "warning" : "active");
                 if (id) slave.id = id;
                 if (experimentId !== undefined) slave.experimentId = experimentId;
 
-                // Handle Alert Generation in real-time
                 if (isWarning) {
                   setAlerts((prevAlerts) => {
-                    // Check if there is already an active alert for this sensor and slave
                     const hasActiveAlert = prevAlerts.some(
                       (a) => a.slaveId === slave.id && a.sensor === "temperature" && !a.resolved
                     );
-
                     if (!hasActiveAlert) {
                       const newAlert = {
                         id: `alert-${Date.now()}`,
@@ -347,17 +403,12 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                     return prevAlerts;
                   });
                 } else {
-                  // If it returned to normal, resolve active alerts for this slave
                   setAlerts((prevAlerts) => {
                     let alertResolved = false;
                     const updatedAlerts = prevAlerts.map((a) => {
                       if (a.slaveId === slave.id && a.sensor === "temperature" && !a.resolved) {
                         alertResolved = true;
-                        return {
-                          ...a,
-                          resolved: true,
-                          resolvedAt: new Date().toISOString()
-                        };
+                        return { ...a, resolved: true, resolvedAt: new Date().toISOString() };
                       }
                       return a;
                     });
@@ -373,7 +424,6 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
               });
             }
 
-            // Update sync status on Master
             setMaster((prev) => ({
               ...prev,
               lastSync: new Date().toISOString()
@@ -384,8 +434,6 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
         }
       };
 
-      // Se a rede falhar, o servidor reiniciar ou o Wi-Fi cair, a conexão WebSocket se quebra.
-      //  Se o backend cair, o painel do Biorreator vai mostrar "offline", mas a cada 5 segundos ele tenta fazer uma ligação nova e invisível. Se o backend voltar, o sistema volta à vida sozinho sem o usuário precisar apertar F5 na página
       socket.onclose = () => {
         console.log("🔌 [WebSocket client] Connection closed. Retrying in 5 seconds...");
         setIsConnected(false);
@@ -409,7 +457,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <LiveDataContext.Provider value={{ slaves, experiments, alerts, master, isConnected, resolveAlert }}>
+    <LiveDataContext.Provider value={{ slaves, experiments, alerts, master, isConnected, resolveAlert, deleteExperiment }}>
       {children}
     </LiveDataContext.Provider>
   );

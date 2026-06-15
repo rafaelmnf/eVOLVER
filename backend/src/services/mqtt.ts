@@ -4,26 +4,22 @@ import { config } from "../config/env";
 
 export class MQTTService extends EventEmitter {
   private client: MqttClient | null = null;
-  private topic = "projeto/sensores/#";
-  private lastErrorMsg: string | null = null;
+  private topicSensores = "projeto/sensores/#";
+  private topicStatus   = "projeto/status/#";
 
   public connect() {
-    // Conecta a um broker MQTT EXISTENTE
     console.log(`[MQTT Service] Connecting to broker at ${config.mqttUrl}...`);
-    // config.mqttUrl tem "mqtt://localhost:1883"
     this.client = mqtt.connect(config.mqttUrl, {
       reconnectPeriod: 5000,
     });
 
     this.client.on("connect", () => {
       console.log("✅ [MQTT Service] Connected to Broker MQTT!");
-      this.lastErrorMsg = null;
       this.emit("status", "active");
 
-      // Escuta o tópico
-      this.client?.subscribe(this.topic, (err) => {
+      this.client!.subscribe([this.topicSensores, this.topicStatus], (err) => {
         if (!err) {
-          console.log(`🎧 [MQTT Service] Listening to topic: ${this.topic}`);
+          console.log(`🎧 [MQTT Service] Listening to: ${this.topicSensores} | ${this.topicStatus}`);
           console.log("⏳ [MQTT Service] Waiting for Raspberry data...\n");
         } else {
           console.error("❌ [MQTT Service] Subscription error:", err);
@@ -31,30 +27,38 @@ export class MQTTService extends EventEmitter {
       });
     });
 
-    /* Toda vez que o Raspberry Pi publica uma mensagem lá no broker, o broker manda essa mensagem pra cá. 
-    O arquivo recebe, transforma o dado cru em um objeto de fácil leitura (JSON), descobre quem 
-    enviou (extraindo o final do tópico, ex: rasp5), formata os dados e avisa o restante do sistema. */
     this.client.on("message", (topic, message) => {
       try {
-        // A mensagem chega crua e transforma em JSON
         const payloadString = message.toString();
         const dados = JSON.parse(payloadString);
-
-        // Extract slave identifier from topic (e.g. "rasp5", "slave-001")
         const origem = topic.split("/").pop() || "unknown";
 
-        console.log(`📥 [MQTT Service] [${origem.toUpperCase()}] Received:`);
-        console.log(`   🌡️ Temp: ${dados.temp} °C | 🧪 OD: ${dados.densidade}`);
+        // Tópico de status: HELLO da plaquinha anunciando presença ociosa
+        if (topic.startsWith("projeto/status/")) {
+          if (dados.tipo === "HELLO") {
+            console.log(`👋 [MQTT Service] HELLO de [${dados.id || origem}]`);
+            this.emit("hello", {
+              id: dados.id || origem,
+              hostname: dados.id || origem,
+              timestamp: new Date().toISOString(),
+            });
+          }
+          return;
+        }
 
-        // Quando chega mensagem: { "temp": 35.2, "densidade": 0.45 } no tópico "projeto/sensores/rasp5"
-        // this.emit("reading", { origem: "rasp5", temp: 35.2, densidade: 0.45 })
-        // Aqui está usando a extensão da classe atual EventEmitter para poder emitir alertas (eventos).
-        // Ele permite que outros arquivos se "inscrevam" para ouvir esse grito, usando o método .on()
+        // Tópico de sensores: leitura em tempo real (só quando vinculado a experimento)
+        console.log(`📥 [MQTT Service] [${origem.toUpperCase()}] Received:`);
+        console.log(`   🌡️ Temp: ${dados.temp} °C | 🧪 OD: ${dados.densidade} | 🔄 RPM: ${dados.rotacao ?? "—"}`);
+
         this.emit("reading", {
           origem,
           temp: typeof dados.temp === "number" ? dados.temp : parseFloat(dados.temp),
           densidade: typeof dados.densidade === "number" ? dados.densidade : parseFloat(dados.densidade),
-          timestamp: new Date().toISOString()
+          rotacao: dados.rotacao !== undefined
+            ? (typeof dados.rotacao === "number" ? dados.rotacao : parseFloat(dados.rotacao))
+            : undefined,
+          experimentId: dados.experimentId ?? null,
+          timestamp: new Date().toISOString(),
         });
 
       } catch (error) {
@@ -70,12 +74,18 @@ export class MQTTService extends EventEmitter {
       this.emit("status", "offline");
     });
 
-    this.client.on("error", (err) => {
-      if (err.message !== this.lastErrorMsg) {
-        console.error("❌ [MQTT Service] Connection error:", err.message);
-        this.lastErrorMsg = err.message;
-      }
+    this.client.on("error", (err: Error) => {
+      console.error("❌ [MQTT Service] Connection error:", err.message);
       this.emit("status", "offline");
     });
+  }
+
+  // Publica um comando para um slave específico (ex: iniciar/parar experimento)
+  public publish(topic: string, payload: object) {
+    if (!this.client?.connected) {
+      console.warn(`⚠️ [MQTT Service] Cannot publish to ${topic}: not connected.`);
+      return;
+    }
+    this.client.publish(topic, JSON.stringify(payload), { qos: 1 });
   }
 }

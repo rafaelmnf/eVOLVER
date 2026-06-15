@@ -22,6 +22,7 @@ export default function Dashboard() {
   const { slaves, experiments, alerts, master } = useLiveData();
   
   const activeSlaves = slaves.filter(s => s.status === 'active').length;
+  const idleSlaves = slaves.filter(s => s.status === 'idle').length;
   const warningSlaves = slaves.filter(s => s.status === 'warning').length;
   const offlineSlaves = slaves.filter(s => s.status === 'offline').length;
   const runningExperiments = experiments.filter(e => e.status === 'running').length;
@@ -59,7 +60,7 @@ export default function Dashboard() {
           icon={<Cpu size={18} />}
           label="Slave Nodes"
           value={`${activeSlaves}/${slaves.length}`}
-          sub={`${warningSlaves} warning · ${offlineSlaves} offline`}
+          sub={`${idleSlaves} disponível · ${warningSlaves} warning · ${offlineSlaves} offline`}
           color="var(--ev-green-primary)"
           index={0}
         />
@@ -226,6 +227,10 @@ export default function Dashboard() {
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--ev-green-primary)' }} />
               Active
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#2a9a6a' }} />
+              Idle
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#d4a017' }} />

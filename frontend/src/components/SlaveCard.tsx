@@ -5,7 +5,7 @@
  */
 
 import { Link } from 'wouter';
-import { Wifi, WifiOff, AlertTriangle, ChevronRight, Clock } from 'lucide-react';
+import { Wifi, WifiOff, AlertTriangle, ChevronRight, Clock, CircleDashed } from 'lucide-react';
 import { RaspberrySlave, formatRelativeTime } from '@/lib/mockData';
 import SensorCard from './SensorCard';
 
@@ -18,11 +18,13 @@ export default function SlaveCard({ slave, index }: SlaveCardProps) {
   const isActive = slave.status === 'active';
   const isOffline = slave.status === 'offline';
   const isWarning = slave.status === 'warning';
+  const isIdle = slave.status === 'idle';
 
   const statusConfig = {
     active: { badge: 'ev-badge-active', dot: 'var(--ev-green-primary)', label: 'Active', pulse: true },
     warning: { badge: 'ev-badge-warning', dot: '#d4a017', label: 'Warning', pulse: false },
     offline: { badge: 'ev-badge-offline', dot: '#4a6a4a', label: 'Offline', pulse: false },
+    idle: { badge: 'ev-badge-active', dot: '#2a7a5a', label: 'Idle', pulse: false },
   };
 
   const cfg = statusConfig[slave.status];
@@ -44,12 +46,14 @@ export default function SlaveCard({ slave, index }: SlaveCardProps) {
           <div
             className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
             style={{
-              backgroundColor: isActive ? 'var(--ev-green-dim)' : isWarning ? 'rgba(61,42,0,0.5)' : '#1a0a0a',
-              border: `1px solid ${isActive ? 'var(--ev-green-muted)' : isWarning ? '#6b4f00' : '#2a1a1a'}`,
+              backgroundColor: isActive ? 'var(--ev-green-dim)' : isWarning ? 'rgba(61,42,0,0.5)' : isIdle ? 'rgba(0,60,40,0.3)' : '#1a0a0a',
+              border: `1px solid ${isActive ? 'var(--ev-green-muted)' : isWarning ? '#6b4f00' : isIdle ? '#1a5a3a' : '#2a1a1a'}`,
             }}
           >
             {isOffline
               ? <WifiOff size={14} style={{ color: '#4a6a4a' }} />
+              : isIdle
+              ? <CircleDashed size={14} style={{ color: '#2a9a6a' }} />
               : <Wifi size={14} style={{ color: isWarning ? '#d4a017' : 'var(--ev-green-primary)' }} />
             }
           </div>
@@ -86,13 +90,30 @@ export default function SlaveCard({ slave, index }: SlaveCardProps) {
         </div>
       </div>
 
-      {/* Sensors grid */}
-      <div className="p-3 grid grid-cols-2 gap-2 flex-1">
-        <SensorCard type="temperature" reading={slave.sensors.temperature} compact />
-        <SensorCard type="ph" reading={slave.sensors.ph} compact />
-        <SensorCard type="od" reading={slave.sensors.od} compact />
-        <SensorCard type="agitation" reading={slave.sensors.agitation} compact />
-      </div>
+      {/* Sensors grid / idle state */}
+      {isIdle ? (
+        <div
+          className="flex flex-col items-center justify-center gap-2 p-4 flex-1"
+          style={{ minHeight: 120 }}
+        >
+          <CircleDashed size={24} style={{ color: '#2a9a6a', opacity: 0.7 }} />
+          <p
+            className="text-xs text-center font-medium"
+            style={{ fontFamily: 'Space Grotesk, monospace', color: '#2a9a6a' }}
+          >
+            Disponível para novo experimento
+          </p>
+          <p className="text-xs text-center" style={{ color: 'var(--ev-text-muted)' }}>
+            Aguardando vinculação
+          </p>
+        </div>
+      ) : (
+        <div className="p-3 grid grid-cols-3 gap-2 flex-1">
+          <SensorCard type="temperature" reading={slave.sensors.temperature} compact />
+          <SensorCard type="od" reading={slave.sensors.od} compact />
+          <SensorCard type="agitation" reading={slave.sensors.agitation} compact />
+        </div>
+      )}
 
       {/* Card footer */}
       <div

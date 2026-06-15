@@ -68,37 +68,29 @@ export class WebSocketService {
                 experimentId: slave.experiment_id,
                 alertCount: 0,
                 sensors: {
-                  temperature: { 
-                    value: lastTemp, 
-                    unit: "°C", 
-                    trend: "stable", 
-                    trendDelta: 0, 
-                    quality: slave.status === "offline" ? "error" : "excellent", 
-                    history: history.temperature.map(p => p.value) 
+                  temperature: {
+                    value: lastTemp,
+                    unit: "°C",
+                    trend: "stable",
+                    trendDelta: 0,
+                    quality: slave.status === "offline" ? "error" : "excellent",
+                    history: history.temperature.map((p: { value: number }) => p.value)
                   },
-                  ph: { 
-                    value: 7.0, 
-                    unit: "pH", 
-                    trend: "stable", 
-                    trendDelta: 0, 
-                    quality: slave.status === "offline" ? "error" : "excellent", 
-                    history: Array(history.temperature.length).fill(7.0) 
+                  od: {
+                    value: lastOD,
+                    unit: "OD600",
+                    trend: "stable",
+                    trendDelta: 0,
+                    quality: slave.status === "offline" ? "error" : "excellent",
+                    history: history.od.map((p: { value: number }) => p.value)
                   },
-                  od: { 
-                    value: lastOD, 
-                    unit: "OD600", 
-                    trend: "stable", 
-                    trendDelta: 0, 
-                    quality: slave.status === "offline" ? "error" : "excellent", 
-                    history: history.od.map(p => p.value) 
-                  },
-                  agitation: { 
-                    value: 200, 
-                    unit: "RPM", 
-                    trend: "stable", 
-                    trendDelta: 0, 
-                    quality: slave.status === "offline" ? "error" : "excellent", 
-                    history: Array(history.temperature.length).fill(200) 
+                  agitation: {
+                    value: 0,
+                    unit: "RPM",
+                    trend: "stable",
+                    trendDelta: 0,
+                    quality: slave.status === "offline" ? "error" : "excellent",
+                    history: []
                   },
                 },
               };
@@ -112,6 +104,52 @@ export class WebSocketService {
         })
         .catch((err) => {
           console.error("❌ [WebSocket Service] Error fetching initial slaves from DB:", err);
+        });
+
+      // Fetch all experiments from database and send to client
+      query(`
+        SELECT e.id, e.name, e.description, e.status, e.started_at, e.ended_at,
+               u.id AS researcher_id, u.name AS researcher_name, u.email AS researcher_email,
+               ARRAY_AGG(s.id) FILTER (WHERE s.id IS NOT NULL) AS slave_ids
+        FROM experiments e
+        LEFT JOIN users u ON u.id = e.researcher_id
+        LEFT JOIN slaves s ON s.experiment_id = e.id
+        GROUP BY e.id, u.id
+        ORDER BY e.started_at DESC
+      `)
+        .then((result) => {
+          const experiments = result.rows.map((row) => {
+            const startedAt = row.started_at ? new Date(row.started_at) : new Date();
+            const now = new Date();
+            const diffMs = now.getTime() - startedAt.getTime();
+            const hours = Math.floor(diffMs / 3600000);
+            const minutes = Math.floor((diffMs % 3600000) / 60000);
+
+            return {
+              id: row.id,
+              name: row.name,
+              description: row.description || "",
+              status: row.status,
+              startedAt: row.started_at ? row.started_at.toISOString() : new Date().toISOString(),
+              endedAt: row.ended_at ? row.ended_at.toISOString() : null,
+              duration: `${hours}h ${minutes}m`,
+              slaveIds: row.slave_ids || [],
+              alertCount: 0,
+              researcher: {
+                id: row.researcher_id || "",
+                name: row.researcher_name || "Pesquisador",
+                email: row.researcher_email || "",
+                avatar: row.researcher_name
+                  ? row.researcher_name.substring(0, 2).toUpperCase()
+                  : "??",
+              },
+            };
+          });
+
+          ws.send(JSON.stringify({ type: "INITIAL_EXPERIMENTS", data: experiments }));
+        })
+        .catch((err) => {
+          console.error("❌ [WebSocket Service] Error fetching initial experiments from DB:", err);
         });
 
       // Ouve o evento "close" e realiza a ação
