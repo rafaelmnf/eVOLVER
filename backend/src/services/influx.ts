@@ -25,16 +25,12 @@ export interface SensorHistories {
  * Writes temperature and OD measurements to InfluxDB
  */
 export async function writeReading(slaveId: string, temp: number, densidade: number): Promise<void> {
-  const pointTemp = new Point("sensors")
+  const point = new Point("sensors")
     .tag("slave_id", slaveId)
-    .floatField("temperature", temp);
-
-  const pointDens = new Point("sensors")
-    .tag("slave_id", slaveId)
+    .floatField("temperature", temp)
     .floatField("od", densidade);
 
-  writeApi.writePoint(pointTemp);
-  writeApi.writePoint(pointDens);
+  writeApi.writePoint(point);
   await writeApi.flush();
 }
 
@@ -47,18 +43,33 @@ export async function getLatestReading(slaveId: string): Promise<LastReading | n
       |> range(start: -30d)
       |> filter(fn: (r) => r["_measurement"] == "sensors" and r["slave_id"] == "${slaveId}")
       |> filter(fn: (r) => r["_field"] == "temperature" or r["_field"] == "od")
-      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
       |> last()
+      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
   `;
 
   try {
     const rows = await queryApi.collectRows<any>(fluxQuery);
     if (rows && rows.length > 0) {
-      const row = rows[0];
+      let temperature = 0;
+      let od = 0;
+      let latestTime = "";
+
+      for (const row of rows) {
+        if (typeof row.temperature === "number") {
+          temperature = row.temperature;
+        }
+        if (typeof row.od === "number") {
+          od = row.od;
+        }
+        if (row._time && (!latestTime || row._time > latestTime)) {
+          latestTime = row._time;
+        }
+      }
+
       return {
-        temperature: typeof row.temperature === "number" ? row.temperature : 0,
-        od: typeof row.od === "number" ? row.od : 0,
-        timestamp: row._time,
+        temperature,
+        od,
+        timestamp: latestTime,
       };
     }
   } catch (error) {

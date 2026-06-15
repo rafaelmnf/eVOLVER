@@ -72,7 +72,7 @@ async function startServer() {
   /* Aqui interliga os dois serviços: 
      Ao criar um objeto mqttService, ele vem com o EventEmitter. Aqui ele usa dela para ouvir o alerta reading emitido ao receber os dados
      das raspberrys e repassa esse data usando a função criada broadcast para o frontend
-  */ 
+  */
 
   mqttService.on("reading", async (data) => {
     try {
@@ -81,7 +81,7 @@ async function startServer() {
 
       // 2. Fetch the data back from InfluxDB to verify it is stored in database
       const dbReading = await getLatestReading(data.origem);
-      
+
       const temp = dbReading ? dbReading.temperature : data.temp;
       const od = dbReading ? dbReading.od : data.densidade;
       const timestamp = dbReading ? dbReading.timestamp : new Date().toISOString();
@@ -91,15 +91,15 @@ async function startServer() {
 
       // 3. Upsert the slave in the PostgreSQL database
       const result = await query(
-        `INSERT INTO slaves (hostname, ip, status, last_seen)
-         VALUES ($1, $2, $3, NOW())
+        `INSERT INTO slaves (hostname, master_id, ip, status, last_seen)
+         VALUES ($1, (SELECT id FROM masters WHERE hostname = 'eMaster' LIMIT 1), $2, $3, NOW())
          ON CONFLICT (hostname) DO UPDATE
          SET status = EXCLUDED.status,
              last_seen = EXCLUDED.last_seen
          RETURNING id, master_id, experiment_id, hostname, ip, status, last_seen`,
         [data.origem, "Connected", status]
       );
-      
+
       const dbSlave = result.rows[0];
 
       // 4. Broadcast the data returned from database to all connected clients
@@ -117,7 +117,7 @@ async function startServer() {
       });
     } catch (error) {
       console.error("❌ [Database Error] Error storing or retrieving slave reading:", error);
-      
+
       // Fallback: broadcast anyway so real-time screen still functions
       wsService.broadcast({
         type: "MQTT_READING",
@@ -140,7 +140,7 @@ async function startServer() {
 
       if (result.rows.length > 0) {
         console.log(`🔌 [Heartbeat] Set ${result.rows.length} slave(s) to offline due to timeout.`);
-        
+
         result.rows.forEach((slave) => {
           wsService.broadcast({
             type: "SLAVE_STATUS_UPDATE",
