@@ -1,5 +1,7 @@
 import { Server as HTTPServer } from "http";
 import { WebSocketServer as WSServer, WebSocket } from "ws";
+import { query } from "./db";
+import { getSensorHistory } from "./influx";
 
 // Criamos o WebSocketService (websocket.ts) para enviar essas leituras aos clientes Web em tempo real.
 export class WebSocketService {
@@ -21,6 +23,96 @@ export class WebSocketService {
 
       // Optional: send connection confirmation to client
       ws.send(JSON.stringify({ type: "SYSTEM", message: "CONNECTED_TO_MASTER" }));
+
+      // Fetch master status from database and send to client
+      query("SELECT hostname, ip, status, last_sync FROM masters WHERE hostname = 'eMaster'")
+        .then((result) => {
+          const dbMaster = result.rows[0];
+          ws.send(JSON.stringify({
+            type: "INITIAL_MASTER",
+            data: {
+              hostname: dbMaster ? dbMaster.hostname : "eMaster",
+              ip: dbMaster ? dbMaster.ip : "10.42.0.1",
+              status: dbMaster ? dbMaster.status : "offline",
+              lastSync: dbMaster && dbMaster.last_sync ? dbMaster.last_sync.toISOString() : "",
+            }
+          }));
+        })
+        .catch((err) => {
+          console.error("❌ [WebSocket Service] Error fetching initial master from DB:", err);
+        });
+
+      // Fetch all slaves from database and send to client
+      query("SELECT id, master_id, experiment_id, hostname, ip, status, last_seen FROM slaves ORDER BY created_at ASC")
+        .then(async (result) => {
+          const dbSlaves = result.rows;
+          const slaves = await Promise.all(
+            dbSlaves.map(async (slave) => {
+              // Fetch history from InfluxDB
+              const history = await getSensorHistory(slave.hostname);
+              
+              // Get last known sensor values from history if available
+              const lastTemp = history.temperature.length > 0 
+                ? history.temperature[history.temperature.length - 1].value 
+                : 0;
+              const lastOD = history.od.length > 0 
+                ? history.od[history.od.length - 1].value 
+                : 0;
+
+              return {
+                id: slave.id,
+                hostname: slave.hostname,
+                ip: slave.ip,
+                status: slave.status,
+                lastSeen: slave.last_seen ? slave.last_seen.toISOString() : new Date().toISOString(),
+                experimentId: slave.experiment_id,
+                alertCount: 0,
+                sensors: {
+                  temperature: { 
+                    value: lastTemp, 
+                    unit: "°C", 
+                    trend: "stable", 
+                    trendDelta: 0, 
+                    quality: slave.status === "offline" ? "error" : "excellent", 
+                    history: history.temperature.map(p => p.value) 
+                  },
+                  ph: { 
+                    value: 7.0, 
+                    unit: "pH", 
+                    trend: "stable", 
+                    trendDelta: 0, 
+                    quality: slave.status === "offline" ? "error" : "excellent", 
+                    history: Array(history.temperature.length).fill(7.0) 
+                  },
+                  od: { 
+                    value: lastOD, 
+                    unit: "OD600", 
+                    trend: "stable", 
+                    trendDelta: 0, 
+                    quality: slave.status === "offline" ? "error" : "excellent", 
+                    history: history.od.map(p => p.value) 
+                  },
+                  agitation: { 
+                    value: 200, 
+                    unit: "RPM", 
+                    trend: "stable", 
+                    trendDelta: 0, 
+                    quality: slave.status === "offline" ? "error" : "excellent", 
+                    history: Array(history.temperature.length).fill(200) 
+                  },
+                },
+              };
+            })
+          );
+
+          ws.send(JSON.stringify({
+            type: "INITIAL_SLAVES",
+            data: slaves,
+          }));
+        })
+        .catch((err) => {
+          console.error("❌ [WebSocket Service] Error fetching initial slaves from DB:", err);
+        });
 
       // Ouve o evento "close" e realiza a ação
       ws.on("close", () => {

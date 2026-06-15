@@ -24,8 +24,8 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [master, setMaster] = useState<RaspberryMaster>({
     id: "master-001",
-    hostname: "evolver-master",
-    ip: "192.168.1.10",
+    hostname: "eMaster",
+    ip: "10.42.0.1",
     status: "offline",
     slaves: [],
     uptime: "0d 0h 0m",
@@ -80,9 +80,95 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
           const message = JSON.parse(event.data);
 
           // Atualiza o estado com novos dados
+          if (message.type === "INITIAL_MASTER") {
+            const { hostname, ip, status, lastSync } = message.data;
+            setMaster((prev) => ({
+              ...prev,
+              hostname,
+              ip,
+              status,
+              lastSync: lastSync || prev.lastSync,
+            }));
+            
+            if (status === "offline") {
+              setSlaves((prevSlaves) =>
+                prevSlaves.map((s) => ({
+                  ...s,
+                  status: "offline",
+                  sensors: {
+                    temperature: { ...s.sensors.temperature, quality: "error" as const, value: 0 },
+                    ph: { ...s.sensors.ph, quality: "error" as const, value: 7.0 },
+                    od: { ...s.sensors.od, quality: "error" as const, value: 0 },
+                    agitation: { ...s.sensors.agitation, quality: "error" as const, value: 0 },
+                  },
+                }))
+              );
+            }
+          }
+
+          if (message.type === "MASTER_STATUS_UPDATE") {
+            const { hostname, status, slavesOffline } = message.data;
+            setMaster((prev) => ({
+              ...prev,
+              status,
+              lastSync: new Date().toISOString(),
+            }));
+
+            if (slavesOffline || status === "offline") {
+              setSlaves((prevSlaves) =>
+                prevSlaves.map((s) => ({
+                  ...s,
+                  status: "offline",
+                  sensors: {
+                    temperature: { ...s.sensors.temperature, quality: "error" as const, value: 0 },
+                    ph: { ...s.sensors.ph, quality: "error" as const, value: 7.0 },
+                    od: { ...s.sensors.od, quality: "error" as const, value: 0 },
+                    agitation: { ...s.sensors.agitation, quality: "error" as const, value: 0 },
+                  },
+                }))
+              );
+            }
+          }
+
+          if (message.type === "INITIAL_SLAVES") {
+            setSlaves(message.data);
+            
+            // Add all slave hostnames to the master's slave list
+            setMaster((prev) => {
+              const hostnames = message.data.map((s: any) => s.hostname);
+              return {
+                ...prev,
+                slaves: Array.from(new Set([...prev.slaves, ...hostnames])),
+                lastSync: new Date().toISOString()
+              };
+            });
+          }
+
+          if (message.type === "SLAVE_STATUS_UPDATE") {
+            const { id, hostname, status, lastSeen } = message.data;
+            setSlaves((prevSlaves) =>
+              prevSlaves.map((s) =>
+                s.id === id || s.hostname.toLowerCase() === hostname.toLowerCase()
+                  ? {
+                      ...s,
+                      status,
+                      lastSeen,
+                      sensors: status === "offline"
+                        ? {
+                            temperature: { ...s.sensors.temperature, quality: "error" as const, value: 0 },
+                            ph: { ...s.sensors.ph, quality: "error" as const, value: 7.0 },
+                            od: { ...s.sensors.od, quality: "error" as const, value: 0 },
+                            agitation: { ...s.sensors.agitation, quality: "error" as const, value: 0 },
+                          }
+                        : s.sensors,
+                    }
+                  : s
+              )
+            );
+          }
 
           if (message.type === "MQTT_READING") { // // Isso é importante porque no  futuro você poderia ter outros tipos de mensagens passando pelo mesmo cabo (como "SYSTEM_ALERT", "CHAT_MESSAGE", etc)
-            const { origem, temp, densidade, timestamp } = message.data;
+            const { origem, temp, densidade, timestamp, id, status, experimentId } = message.data;
 
             // Determine threshold warnings
             let isWarning = false;
@@ -97,6 +183,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
 
             const currentSlaves = slavesRef.current;
             const index = currentSlaves.findIndex((s) =>
+              (id && s.id === id) ||
               s.id.toLowerCase() === origem.toLowerCase() ||
               s.hostname.toLowerCase() === origem.toLowerCase() ||
               s.hostname.toLowerCase().includes(origem.toLowerCase()) ||
@@ -107,12 +194,12 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
             if (index === -1) {
               console.log(`🔌 [Live Data] Discovered new slave: ${origem}`);
               const newSlave: RaspberrySlave = {
-                id: origem,
+                id: id || origem,
                 hostname: origem,
                 ip: "Connected",
-                status: isWarning ? "warning" : "active",
+                status: status || (isWarning ? "warning" : "active"),
                 lastSeen: timestamp,
-                experimentId: null,
+                experimentId: experimentId || null,
                 alertCount: isWarning ? 1 : 0,
                 sensors: {
                   temperature: {
@@ -191,7 +278,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                 const slave = { ...newSlaves[index] };
 
                 // Update Temperature readings
-                const tempHistory = [...slave.sensors.temperature.history];
+                const tempHistory = [...(slave.sensors.temperature.history || [])];
                 const prevTemp = tempHistory[tempHistory.length - 1] ?? temp;
                 // empurra valores novos e descartas aqueles depois de 20
                 tempHistory.push(temp);
@@ -211,7 +298,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                 };
 
                 // Update Optical Density (OD) readings
-                const odHistory = [...slave.sensors.od.history];
+                const odHistory = [...(slave.sensors.od.history || [])];
                 const prevOD = odHistory[odHistory.length - 1] ?? densidade;
                 odHistory.push(densidade);
                 if (odHistory.length > 20) odHistory.shift();
@@ -227,7 +314,9 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
 
                 // Update general slave states
                 slave.lastSeen = timestamp;
-                slave.status = isWarning ? "warning" : "active";
+                slave.status = status || (isWarning ? "warning" : "active");
+                if (id) slave.id = id;
+                if (experimentId !== undefined) slave.experimentId = experimentId;
 
                 // Handle Alert Generation in real-time
                 if (isWarning) {
