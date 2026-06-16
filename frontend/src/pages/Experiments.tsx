@@ -1,55 +1,51 @@
 import { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Link, useLocation } from 'wouter';
-import { Experiment } from '@/lib/mockData';
 import { useLiveData } from '@/contexts/LiveDataContext';
-import { ChevronRight, Plus, X, FlaskConical } from 'lucide-react';
+import { ChevronRight, Plus, X, FlaskConical, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Experiments() {
-  const { experiments: liveExperiments, slaves } = useLiveData();
-  const [experiments, setExperiments] = useState(liveExperiments);
+  const { experiments, slaves, deleteExperiment } = useLiveData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newExpName, setNewExpName] = useState('');
   const [newExpDesc, setNewExpDesc] = useState('');
   const [selectedSlaves, setSelectedSlaves] = useState<Set<string>>(new Set());
-  
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!user) return;
-    const newId = `exp-00${liveExperiments.length + 1}`;
-    
-    const newExp: Experiment = {
-      id: newId,
-      name: newExpName || 'Untitled Experiment',
-      description: newExpDesc,
-      status: 'running',
-      startedAt: new Date().toISOString(),
-      endedAt: null,
-      duration: '0h 0m',
-      slaveIds: Array.from(selectedSlaves),
-      alertCount: 0,
-      researcher: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        avatar: user.name.substring(0, 2).toUpperCase()
-      }
-    };
+    try {
+      const res = await fetch('/api/experiments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newExpName || 'Untitled Experiment',
+          description: newExpDesc,
+          slaveIds: Array.from(selectedSlaves),
+          researcherName: user.name,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const { id: newId } = await res.json();
+      // LiveDataContext recebe EXPERIMENT_CREATED via WebSocket e atualiza o estado
+      setIsModalOpen(false);
+      setLocation(`/experimento/${newId}`);
+    } catch (err) {
+      console.error('❌ Erro ao criar experimento:', err);
+    }
+  };
 
-    // Update slaves to belong to this new experiment
-    slaves.forEach(slave => {
-      if (selectedSlaves.has(slave.id)) {
-        slave.experimentId = newId;
-      }
-    });
-
-    liveExperiments.push(newExp);
-    setExperiments([...liveExperiments]);
-    setIsModalOpen(false);
-    setLocation(`/experimento/${newId}`);
+  const handleDelete = async (id: string) => {
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      return;
+    }
+    setConfirmDeleteId(null);
+    await deleteExperiment(id);
   };
   return (
     <DashboardLayout
@@ -88,11 +84,13 @@ export default function Experiments() {
       ) : (
         <div className="grid grid-cols-2 gap-4">
           {experiments.map((exp, i) => (
-            <Link key={exp.id} href={`/experimento/${exp.id}`}>
-              <div
-                className="ev-card p-4 cursor-pointer animate-fade-in-up"
-                style={{ animationDelay: `${i * 50}ms` }}
-              >
+            <div
+              key={exp.id}
+              className="ev-card animate-fade-in-up flex flex-col"
+              style={{ animationDelay: `${i * 50}ms` }}
+            >
+              <Link href={`/experimento/${exp.id}`}>
+              <div className="p-4 cursor-pointer flex-1">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1 min-w-0">
                     <div
@@ -191,7 +189,45 @@ export default function Experiments() {
                   </span>
                 </div>
               </div>
-            </Link>
+              </Link>
+
+              {/* Delete button — fora do Link para não navegar */}
+              <div
+                className="flex items-center justify-end px-4 py-2"
+                style={{ borderTop: '1px solid var(--ev-border-subtle)' }}
+              >
+                {confirmDeleteId === exp.id ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs" style={{ color: '#d4a017' }}>Confirmar exclusão?</span>
+                    <button
+                      onClick={() => handleDelete(exp.id)}
+                      className="text-xs px-2 py-0.5 rounded"
+                      style={{ backgroundColor: 'rgba(197,48,48,0.15)', color: '#e74c3c', border: '1px solid rgba(197,48,48,0.3)' }}
+                    >
+                      Excluir
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="text-xs"
+                      style={{ color: 'var(--ev-text-muted)' }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleDelete(exp.id)}
+                    className="flex items-center gap-1 text-xs transition-colors duration-200"
+                    style={{ color: 'var(--ev-text-muted)' }}
+                    onMouseEnter={e => (e.currentTarget.style.color = '#e74c3c')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--ev-text-muted)')}
+                  >
+                    <Trash2 size={11} />
+                    Excluir
+                  </button>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -260,7 +296,9 @@ export default function Experiments() {
                           <span className="text-xs" style={{ color: 'var(--ev-text-muted)' }}>{slave.ip}</span>
                         </div>
                         <span className="text-xs" style={{ color: isAvailable ? (isSelected ? 'var(--ev-green-primary)' : 'var(--ev-text-muted)') : '#d4a017' }}>
-                          {isAvailable ? (isSelected ? '✓ Selected' : 'Available') : (slave.status === 'offline' ? 'Offline' : 'In Use')}
+                          {isAvailable
+                            ? (isSelected ? '✓ Selected' : slave.status === 'idle' ? 'Idle — Disponível' : 'Active')
+                            : (slave.status === 'offline' ? 'Offline' : 'In Use')}
                         </span>
                       </div>
                     );

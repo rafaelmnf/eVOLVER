@@ -37,11 +37,10 @@ import {
   ChevronUp,
 } from 'lucide-react';
 
-type SensorTab = 'temperature' | 'ph' | 'od' | 'agitation';
+type SensorTab = 'temperature' | 'od' | 'agitation';
 
 const sensorConfig: Record<SensorTab, { label: string; unit: string; color: string; refMin?: number; refMax?: number }> = {
   temperature: { label: 'Temperature', unit: '°C', color: '#1db954', refMin: 36, refMax: 38.5 },
-  ph: { label: 'pH', unit: 'pH', color: '#22d45f', refMin: 6.9, refMax: 7.5 },
   od: { label: 'OD600', unit: 'OD', color: '#1db954', refMin: 0, refMax: 2.0 },
   agitation: { label: 'Agitation', unit: 'RPM', color: '#22d45f', refMin: 150, refMax: 250 },
 };
@@ -56,6 +55,7 @@ export default function Experiment() {
   const expSlaves = slaves.filter(s => experiment?.slaveIds.includes(s.id));
 
   const [activeTab, setActiveTab] = useState<SensorTab>('temperature');
+
   const [activeSlave, setActiveSlave] = useState(expSlaves[0]?.id ?? 'slave-001');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
@@ -470,7 +470,7 @@ export default function Experiment() {
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                    {(['temperature', 'ph', 'od', 'agitation'] as const).map(s => (
+                    {(['temperature', 'od', 'agitation'] as const).map(s => (
                       <div key={s} className="flex items-center justify-between">
                         <span className="ev-label" style={{ fontSize: '0.6rem' }}>
                           {getSensorLabel(s)}

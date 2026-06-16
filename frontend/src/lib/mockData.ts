@@ -1,8 +1,8 @@
 // eVOLVER — Mock Data
 // Simulates real-time sensor readings, devices, experiments, and alerts
 
-export type SensorType = 'temperature' | 'ph' | 'od' | 'agitation';
-export type DeviceStatus = 'active' | 'warning' | 'offline';
+export type SensorType = 'temperature' | 'od' | 'agitation';
+export type DeviceStatus = 'active' | 'warning' | 'offline' | 'idle';
 export type AlertSeverity = 'critical' | 'warning' | 'info';
 export type ExperimentStatus = 'running' | 'paused' | 'completed' | 'error';
 
@@ -24,7 +24,6 @@ export interface RaspberrySlave {
   experimentId: string | null;
   sensors: {
     temperature: SensorReading;
-    ph: SensorReading;
     od: SensorReading;
     agitation: SensorReading;
   };
@@ -126,7 +125,6 @@ export const mockSlaves: RaspberrySlave[] = [
     alertCount: 0,
     sensors: {
       temperature: { value: 37.2, unit: '°C', trend: 'up', trendDelta: 0.2, quality: 'excellent', history: generateHistory(37, 0.8) },
-      ph: { value: 7.1, unit: 'pH', trend: 'stable', trendDelta: 0.0, quality: 'excellent', history: generateHistory(7.0, 0.3) },
       od: { value: 0.842, unit: 'OD600', trend: 'up', trendDelta: 0.031, quality: 'good', history: generateHistory(0.8, 0.1) },
       agitation: { value: 220, unit: 'RPM', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(220, 5) },
     },
@@ -138,10 +136,9 @@ export const mockSlaves: RaspberrySlave[] = [
     status: 'warning',
     lastSeen: new Date(Date.now() - 5000).toISOString(),
     experimentId: 'exp-001',
-    alertCount: 2,
+    alertCount: 1,
     sensors: {
       temperature: { value: 38.9, unit: '°C', trend: 'up', trendDelta: 1.4, quality: 'poor', history: generateHistory(38.5, 1.2) },
-      ph: { value: 6.8, unit: 'pH', trend: 'down', trendDelta: -0.3, quality: 'good', history: generateHistory(7.0, 0.4) },
       od: { value: 1.204, unit: 'OD600', trend: 'up', trendDelta: 0.08, quality: 'good', history: generateHistory(1.1, 0.15) },
       agitation: { value: 215, unit: 'RPM', trend: 'stable', trendDelta: -2, quality: 'excellent', history: generateHistory(220, 8) },
     },
@@ -156,7 +153,6 @@ export const mockSlaves: RaspberrySlave[] = [
     alertCount: 0,
     sensors: {
       temperature: { value: 36.8, unit: '°C', trend: 'stable', trendDelta: 0.0, quality: 'excellent', history: generateHistory(37, 0.5) },
-      ph: { value: 7.3, unit: 'pH', trend: 'up', trendDelta: 0.1, quality: 'excellent', history: generateHistory(7.2, 0.2) },
       od: { value: 0.612, unit: 'OD600', trend: 'up', trendDelta: 0.022, quality: 'excellent', history: generateHistory(0.6, 0.08) },
       agitation: { value: 180, unit: 'RPM', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(180, 4) },
     },
@@ -171,7 +167,6 @@ export const mockSlaves: RaspberrySlave[] = [
     alertCount: 1,
     sensors: {
       temperature: { value: 0, unit: '°C', trend: 'stable', trendDelta: 0, quality: 'error', history: Array(20).fill(0) },
-      ph: { value: 0, unit: 'pH', trend: 'stable', trendDelta: 0, quality: 'error', history: Array(20).fill(0) },
       od: { value: 0, unit: 'OD600', trend: 'stable', trendDelta: 0, quality: 'error', history: Array(20).fill(0) },
       agitation: { value: 0, unit: 'RPM', trend: 'stable', trendDelta: 0, quality: 'error', history: Array(20).fill(0) },
     },
@@ -186,7 +181,6 @@ export const mockSlaves: RaspberrySlave[] = [
     alertCount: 0,
     sensors: {
       temperature: { value: 37.0, unit: '°C', trend: 'stable', trendDelta: 0.0, quality: 'excellent', history: generateHistory(37, 0.4) },
-      ph: { value: 7.0, unit: 'pH', trend: 'stable', trendDelta: 0.0, quality: 'excellent', history: generateHistory(7.0, 0.15) },
       od: { value: 0.445, unit: 'OD600', trend: 'up', trendDelta: 0.015, quality: 'excellent', history: generateHistory(0.43, 0.06) },
       agitation: { value: 200, unit: 'RPM', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(200, 3) },
     },
@@ -201,7 +195,6 @@ export const mockSlaves: RaspberrySlave[] = [
     alertCount: 0,
     sensors: {
       temperature: { value: 37.4, unit: '°C', trend: 'down', trendDelta: -0.1, quality: 'excellent', history: generateHistory(37.3, 0.6) },
-      ph: { value: 7.2, unit: 'pH', trend: 'stable', trendDelta: 0.0, quality: 'excellent', history: generateHistory(7.2, 0.2) },
       od: { value: 0.988, unit: 'OD600', trend: 'up', trendDelta: 0.042, quality: 'good', history: generateHistory(0.95, 0.12) },
       agitation: { value: 225, unit: 'RPM', trend: 'up', trendDelta: 5, quality: 'excellent', history: generateHistory(220, 6) },
     },
@@ -210,60 +203,56 @@ export const mockSlaves: RaspberrySlave[] = [
     id: 'slave-007',
     hostname: 'evolver-s07',
     ip: '192.168.1.27',
-    status: 'active',
+    status: 'idle',
     lastSeen: new Date(Date.now() - 1000).toISOString(),
     experimentId: null,
     alertCount: 0,
     sensors: {
-      temperature: { value: 37.0, unit: '°C', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(37, 0.2) },
-      ph: { value: 7.0, unit: 'pH', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(7.0, 0.1) },
-      od: { value: 0.1, unit: 'OD600', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(0.1, 0.05) },
-      agitation: { value: 200, unit: 'RPM', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(200, 2) },
+      temperature: { value: 0, unit: '°C', trend: 'stable', trendDelta: 0, quality: 'excellent', history: [] },
+      od: { value: 0, unit: 'OD600', trend: 'stable', trendDelta: 0, quality: 'excellent', history: [] },
+      agitation: { value: 0, unit: 'RPM', trend: 'stable', trendDelta: 0, quality: 'excellent', history: [] },
     },
   },
   {
     id: 'slave-008',
     hostname: 'evolver-s08',
     ip: '192.168.1.28',
-    status: 'active',
+    status: 'idle',
     lastSeen: new Date(Date.now() - 1200).toISOString(),
     experimentId: null,
     alertCount: 0,
     sensors: {
-      temperature: { value: 37.0, unit: '°C', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(37, 0.2) },
-      ph: { value: 7.0, unit: 'pH', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(7.0, 0.1) },
-      od: { value: 0.1, unit: 'OD600', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(0.1, 0.05) },
-      agitation: { value: 200, unit: 'RPM', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(200, 2) },
+      temperature: { value: 0, unit: '°C', trend: 'stable', trendDelta: 0, quality: 'excellent', history: [] },
+      od: { value: 0, unit: 'OD600', trend: 'stable', trendDelta: 0, quality: 'excellent', history: [] },
+      agitation: { value: 0, unit: 'RPM', trend: 'stable', trendDelta: 0, quality: 'excellent', history: [] },
     },
   },
   {
     id: 'slave-009',
     hostname: 'evolver-s09',
     ip: '192.168.1.29',
-    status: 'active',
+    status: 'idle',
     lastSeen: new Date(Date.now() - 900).toISOString(),
     experimentId: null,
     alertCount: 0,
     sensors: {
-      temperature: { value: 37.0, unit: '°C', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(37, 0.2) },
-      ph: { value: 7.0, unit: 'pH', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(7.0, 0.1) },
-      od: { value: 0.1, unit: 'OD600', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(0.1, 0.05) },
-      agitation: { value: 200, unit: 'RPM', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(200, 2) },
+      temperature: { value: 0, unit: '°C', trend: 'stable', trendDelta: 0, quality: 'excellent', history: [] },
+      od: { value: 0, unit: 'OD600', trend: 'stable', trendDelta: 0, quality: 'excellent', history: [] },
+      agitation: { value: 0, unit: 'RPM', trend: 'stable', trendDelta: 0, quality: 'excellent', history: [] },
     },
   },
   {
     id: 'slave-010',
     hostname: 'evolver-s10',
     ip: '192.168.1.30',
-    status: 'active',
+    status: 'idle',
     lastSeen: new Date(Date.now() - 2000).toISOString(),
     experimentId: null,
     alertCount: 0,
     sensors: {
-      temperature: { value: 37.0, unit: '°C', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(37, 0.2) },
-      ph: { value: 7.0, unit: 'pH', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(7.0, 0.1) },
-      od: { value: 0.1, unit: 'OD600', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(0.1, 0.05) },
-      agitation: { value: 200, unit: 'RPM', trend: 'stable', trendDelta: 0, quality: 'excellent', history: generateHistory(200, 2) },
+      temperature: { value: 0, unit: '°C', trend: 'stable', trendDelta: 0, quality: 'excellent', history: [] },
+      od: { value: 0, unit: 'OD600', trend: 'stable', trendDelta: 0, quality: 'excellent', history: [] },
+      agitation: { value: 0, unit: 'RPM', trend: 'stable', trendDelta: 0, quality: 'excellent', history: [] },
     },
   },
 ];
@@ -278,7 +267,7 @@ export const mockExperiments: Experiment[] = [
     endedAt: null,
     duration: '18h 24m',
     slaveIds: ['slave-001', 'slave-002', 'slave-006'],
-    alertCount: 2,
+    alertCount: 1,
     researcher: { id: 'r1', name: 'Dr. Ana Lima', email: 'ana.lima@lab.br', avatar: 'AL' },
   },
   {
@@ -324,20 +313,6 @@ export const mockAlerts: Alert[] = [
   },
   {
     id: 'alert-002',
-    slaveId: 'slave-002',
-    slaveName: 'evolver-s02',
-    experimentId: 'exp-001',
-    sensor: 'ph',
-    severity: 'warning',
-    message: 'pH below lower threshold (6.8 < 6.9)',
-    value: 6.8,
-    threshold: 6.9,
-    timestamp: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
-    resolved: false,
-    resolvedAt: null,
-  },
-  {
-    id: 'alert-003',
     slaveId: 'slave-004',
     slaveName: 'evolver-s04',
     experimentId: null,
@@ -351,7 +326,7 @@ export const mockAlerts: Alert[] = [
     resolvedAt: null,
   },
   {
-    id: 'alert-004',
+    id: 'alert-003',
     slaveId: 'slave-001',
     slaveName: 'evolver-s01',
     experimentId: 'exp-001',
@@ -369,13 +344,11 @@ export const mockAlerts: Alert[] = [
 export const mockTimeSeries: Record<string, Record<SensorType, TimeSeriesPoint[]>> = {
   'slave-001': {
     temperature: generateTimeSeries(37, 0.8),
-    ph: generateTimeSeries(7.0, 0.3),
     od: generateTimeSeries(0.5, 0.15),
     agitation: generateTimeSeries(220, 5),
   },
   'slave-002': {
     temperature: generateTimeSeries(37.5, 1.5),
-    ph: generateTimeSeries(7.1, 0.4),
     od: generateTimeSeries(0.9, 0.2),
     agitation: generateTimeSeries(215, 8),
   },
@@ -395,7 +368,6 @@ export function formatRelativeTime(isoString: string): string {
 export function getSensorLabel(type: SensorType): string {
   const labels: Record<SensorType, string> = {
     temperature: 'Temperature',
-    ph: 'pH',
     od: 'OD600',
     agitation: 'Agitation',
   };

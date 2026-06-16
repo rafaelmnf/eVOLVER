@@ -19,14 +19,12 @@ import {
   RotateCcw,
   Server,
   Thermometer,
-  Droplets,
   Eye,
   Wind,
 } from 'lucide-react';
 
 const sensorIcons = {
   temperature: Thermometer,
-  ph: Droplets,
   od: Eye,
   agitation: Wind,
 };
@@ -35,8 +33,6 @@ interface DeviceConfig {
   sampleInterval: number;
   tempMin: number;
   tempMax: number;
-  phMin: number;
-  phMax: number;
   odMin: number;
   odMax: number;
   agitationMin: number;
@@ -49,8 +45,6 @@ const defaultConfig: DeviceConfig = {
   sampleInterval: 30,
   tempMin: 35.0,
   tempMax: 39.0,
-  phMin: 6.8,
-  phMax: 7.6,
   odMin: 0.0,
   odMax: 3.0,
   agitationMin: 100,
@@ -308,7 +302,7 @@ function TopologySlaveNode({
 
       {/* Sensor dots */}
       <div className="flex gap-1 mt-1">
-        {(['temperature', 'ph', 'od', 'agitation'] as const).map(s => {
+        {(['temperature', 'od', 'agitation'] as const).map(s => {
           const q = slave.sensors[s].quality;
           const color = q === 'excellent' || q === 'good'
             ? 'var(--ev-green-primary)'
@@ -412,7 +406,7 @@ function SlaveConfigPanel({
 
           {/* Current sensor values */}
           <div className="hidden md:flex items-center gap-4 text-xs">
-            {(['temperature', 'ph', 'od', 'agitation'] as const).map(s => {
+            {(['temperature', 'od', 'agitation'] as const).map(s => {
               const Icon = sensorIcons[s];
               return (
                 <div key={s} className="flex items-center gap-1" style={{ color: 'var(--ev-text-muted)' }}>
@@ -470,7 +464,7 @@ function SlaveConfigPanel({
 
             {/* Alert thresholds */}
             <div>
-              <div className="ev-label mb-3">Alert Thresholds — Temperature & pH</div>
+              <div className="ev-label mb-3">Alert Thresholds — Temperature</div>
               <ConfigField
                 label="Temp Min (°C)"
                 value={config.tempMin}
@@ -487,24 +481,6 @@ function SlaveConfigPanel({
                 max={45}
                 step={0.5}
                 onChange={v => onChange('tempMax', v)}
-                disabled={isOffline}
-              />
-              <ConfigField
-                label="pH Min"
-                value={config.phMin}
-                min={4}
-                max={10}
-                step={0.1}
-                onChange={v => onChange('phMin', v)}
-                disabled={isOffline}
-              />
-              <ConfigField
-                label="pH Max"
-                value={config.phMax}
-                min={4}
-                max={10}
-                step={0.1}
-                onChange={v => onChange('phMax', v)}
                 disabled={isOffline}
               />
             </div>

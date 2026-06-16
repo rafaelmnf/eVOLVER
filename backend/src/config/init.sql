@@ -1,5 +1,5 @@
 -- Status e Tipos
-CREATE TYPE device_status AS ENUM ('active', 'warning', 'offline');
+CREATE TYPE device_status AS ENUM ('active', 'warning', 'offline', 'idle');
 CREATE TYPE alert_severity AS ENUM ('critical', 'warning', 'info');
 CREATE TYPE experiment_status AS ENUM ('running', 'paused', 'completed', 'error');
 CREATE TYPE sensor_type AS ENUM ('temperature', 'od', 'agitation');
