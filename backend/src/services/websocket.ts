@@ -43,7 +43,7 @@ export class WebSocketService {
         });
 
       // Fetch all slaves from database and send to client
-      query("SELECT id, master_id, experiment_id, hostname, ip, status, last_seen FROM slaves ORDER BY created_at ASC")
+      query("SELECT id, master_id, experiment_id, hostname, ip, status, last_seen FROM slaves ORDER BY created_at DESC")
         .then(async (result) => {
           const dbSlaves = result.rows;
           const slaves = await Promise.all(
@@ -115,7 +115,7 @@ export class WebSocketService {
         LEFT JOIN users u ON u.id = e.researcher_id
         LEFT JOIN slaves s ON s.experiment_id = e.id
         GROUP BY e.id, u.id
-        ORDER BY e.started_at DESC
+        ORDER BY e.created_at DESC
       `)
         .then((result) => {
           const experiments = result.rows.map((row) => {

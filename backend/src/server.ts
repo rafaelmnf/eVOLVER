@@ -6,6 +6,9 @@ import { WebSocketService } from "./services/websocket";
 import { MQTTService } from "./services/mqtt";
 import { query } from "./services/db";
 import { writeReading, getLatestReading } from "./services/influx";
+import { runMigrations } from "./config/migrate";
+import { registerExperimentRoutes } from "./routes/experiments";
+import { registerSlaveRoutes } from "./routes/slaves";
 
 async function startServer() {
   const app = createApp();
@@ -13,6 +16,9 @@ async function startServer() {
 
   const wsService = new WebSocketService(server);
   const mqttService = new MQTTService();
+
+  // Garante alterações de schema em bancos já existentes (idempotente)
+  await runMigrations();
 
   // Seed/ensure Master exists in PostgreSQL database
   try {
@@ -26,114 +32,11 @@ async function startServer() {
     console.error("❌ [Database Seed] Error seeding eMaster:", err);
   }
 
-  // --- ROTA: Criar experimento e notificar slaves via MQTT ---
-  app.post("/api/experiments", async (req, res) => {
-    try {
-      const { name, description, slaveIds, researcherName } = req.body;
-
-      if (!name || !Array.isArray(slaveIds) || slaveIds.length === 0) {
-        res.status(400).json({ error: "name e slaveIds são obrigatórios." });
-        return;
-      }
-
-      // Insere o experimento no banco
-      const expResult = await query(
-        `INSERT INTO experiments (name, description, status)
-         VALUES ($1, $2, 'running')
-         RETURNING id, name, description, status, started_at`,
-        [name, description || ""]
-      );
-      const experiment = expResult.rows[0];
-
-      // Vincula cada slave ao experimento e publica comando via MQTT
-      for (const slaveId of slaveIds) {
-        await query(
-          `UPDATE slaves SET experiment_id = $1, status = 'active' WHERE id = $2`,
-          [experiment.id, slaveId]
-        );
-
-        // Busca hostname do slave para montar o tópico
-        const slaveResult = await query(
-          `SELECT hostname FROM slaves WHERE id = $1`,
-          [slaveId]
-        );
-        const hostname = slaveResult.rows[0]?.hostname;
-        if (hostname) {
-          const topico = `projeto/comandos/${hostname}`;
-          mqttService.publish(topico, {
-            comando: "iniciar_experimento",
-            experimentId: experiment.id,
-          });
-          console.log(`📡 [Experiment] Comando iniciar_experimento → ${topico}`);
-        }
-      }
-
-      // Avisa o frontend do novo experimento
-      wsService.broadcast({
-        type: "EXPERIMENT_CREATED",
-        data: {
-          id: experiment.id,
-          name: experiment.name,
-          description: experiment.description,
-          status: experiment.status,
-          startedAt: experiment.started_at,
-          slaveIds,
-          researcher: { name: researcherName || "Pesquisador" },
-        },
-      });
-
-      res.status(201).json({ id: experiment.id });
-    } catch (error) {
-      console.error("❌ [API] Erro ao criar experimento:", error);
-      res.status(500).json({ error: "Erro interno ao criar experimento." });
-    }
-  });
-
-  // --- ROTA: Excluir experimento e liberar slaves ---
-  app.delete("/api/experiments/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-
-      // Busca slaves vinculados antes de deletar
-      const slavesResult = await query(
-        `SELECT id, hostname FROM slaves WHERE experiment_id = $1`,
-        [id]
-      );
-
-      // Libera cada slave e envia comando de parada via MQTT
-      for (const slave of slavesResult.rows) {
-        await query(
-          `UPDATE slaves SET experiment_id = NULL, status = 'idle' WHERE id = $1`,
-          [slave.id]
-        );
-
-        mqttService.publish(`projeto/comandos/${slave.hostname}`, {
-          comando: "parar_experimento",
-        });
-
-        wsService.broadcast({
-          type: "SLAVE_HELLO",
-          data: {
-            id: slave.id,
-            hostname: slave.hostname,
-            ip: "Connected",
-            timestamp: new Date().toISOString(),
-          },
-        });
-      }
-
-      // Remove o experimento
-      await query(`DELETE FROM experiments WHERE id = $1`, [id]);
-
-      wsService.broadcast({ type: "EXPERIMENT_DELETED", data: { id } });
-
-      console.log(`🗑️ [API] Experimento ${id} excluído. ${slavesResult.rows.length} slave(s) liberado(s).`);
-      res.status(200).json({ ok: true });
-    } catch (error) {
-      console.error("❌ [API] Erro ao excluir experimento:", error);
-      res.status(500).json({ error: "Erro interno ao excluir experimento." });
-    }
-  });
+  // --- ROTAS DE API ---
+  // Registradas antes do fallback SPA. As instâncias de WS/MQTT são injetadas
+  // para que as rotas possam fazer broadcast e publicar comandos.
+  registerSlaveRoutes(app);
+  registerExperimentRoutes(app, { wsService, mqttService });
 
   let lastMqttStatus: string | null = null;
 
@@ -238,7 +141,7 @@ async function startServer() {
 
   mqttService.on("reading", async (data) => {
     try {
-      await writeReading(data.origem, data.temp, data.densidade);
+      await writeReading(data.origem, data.temp, data.densidade, data.rotacao);
 
       const dbReading = await getLatestReading(data.origem);
 
