@@ -14,16 +14,25 @@ export default function Cadastro() {
   const [endereco, setEndereco] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
-      alert("As senhas não coincidem!");
+      setError("As senhas não coincidem!");
       return;
     }
-    if (email && password && name) {
-      register({ name, email, cpf, endereco });
-      setLocation("/dashboard");
+    if (!(email && password && name)) return;
+    setError("");
+    setLoading(true);
+    try {
+      await register({ name, email, password, cpf, endereco });
+      setLocation("/experimentos");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao cadastrar.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -128,8 +137,14 @@ export default function Cadastro() {
             </div>
           </div>
 
-          <button type="submit" className="w-full ev-btn-primary mt-6 py-2.5">
-            Cadastrar
+          {error && (
+            <p className="text-sm text-center" style={{ color: "var(--ev-danger)" }}>
+              {error}
+            </p>
+          )}
+
+          <button type="submit" disabled={loading} className="w-full ev-btn-primary mt-6 py-2.5 disabled:opacity-50">
+            {loading ? "Cadastrando..." : "Cadastrar"}
           </button>
         </form>
 

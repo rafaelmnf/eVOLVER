@@ -19,6 +19,30 @@ interface LiveDataContextType {
 
 const LiveDataContext = createContext<LiveDataContextType | undefined>(undefined);
 
+// Mapeia uma linha do GET /api/experiments para o shape Experiment do frontend.
+function mapApiExperiment(row: any): Experiment {
+  const researcherName = row.researcher?.name || "Pesquisador";
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || "",
+    status: row.status,
+    startedAt: row.startedAt ?? null,
+    endedAt: null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    duration: "—",
+    slaveIds: row.slaveIds || [],
+    alertCount: 0,
+    researcher: {
+      id: row.researcher?.id || row.researcherId || "",
+      name: researcherName,
+      email: row.researcher?.email || "",
+      avatar: researcherName.substring(0, 2).toUpperCase(),
+    },
+  };
+}
+
 export function LiveDataProvider({ children }: { children: React.ReactNode }) {
   const [slaves, setSlaves] = useState<RaspberrySlave[]>([]);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
@@ -38,6 +62,19 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     slavesRef.current = slaves;
   }, [slaves]);
+
+  // Carrega a lista de experimentos do backend no mount (fonte única; o WebSocket
+  // mantém atualizações em tempo real via EXPERIMENT_CREATED/EXPERIMENT_DELETED).
+  useEffect(() => {
+    fetch("/api/experiments")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows: any[]) => {
+        setExperiments(rows.map(mapApiExperiment));
+      })
+      .catch((err) => {
+        console.error("❌ [Live Data] Erro ao carregar experimentos:", err);
+      });
+  }, []);
 
   const deleteExperiment = async (id: string) => {
     await fetch(`/api/experiments/${id}`, { method: "DELETE" });
@@ -138,7 +175,14 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (message.type === "INITIAL_EXPERIMENTS") {
-            setExperiments(message.data);
+            // A fonte autoritativa é o GET /api/experiments (traz createdAt).
+            // Aqui apenas garantimos createdAt (fallback startedAt) caso o GET ainda
+            // não tenha respondido, sem sobrescrever dados já carregados.
+            const incoming: Experiment[] = (message.data as any[]).map((e) => ({
+              ...e,
+              createdAt: e.createdAt || e.startedAt || new Date().toISOString(),
+            }));
+            setExperiments((prev) => (prev.length > 0 ? prev : incoming));
           }
 
           if (message.type === "SLAVE_STATUS_UPDATE") {
@@ -167,18 +211,28 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
             const d = message.data;
             setExperiments((prev) => {
               if (prev.some((e) => e.id === d.id)) return prev;
-              return [...prev, {
-                id: d.id,
-                name: d.name,
-                description: d.description || "",
-                status: "running" as const,
-                startedAt: d.startedAt,
-                endedAt: null,
-                duration: "0h 0m",
-                slaveIds: d.slaveIds || [],
-                alertCount: 0,
-                researcher: d.researcher || { id: "", name: "Pesquisador", email: "", avatar: "??" },
-              }];
+              const researcherName = d.researcher?.name || "Pesquisador";
+              return [
+                {
+                  id: d.id,
+                  name: d.name,
+                  description: d.description || "",
+                  status: (d.status || "draft") as Experiment["status"],
+                  startedAt: d.startedAt ?? null,
+                  endedAt: null,
+                  createdAt: d.createdAt || new Date().toISOString(),
+                  duration: "—",
+                  slaveIds: d.slaveIds || [],
+                  alertCount: 0,
+                  researcher: {
+                    id: d.researcher?.id || "",
+                    name: researcherName,
+                    email: d.researcher?.email || "",
+                    avatar: researcherName.substring(0, 2).toUpperCase(),
+                  },
+                },
+                ...prev,
+              ];
             });
           }
 

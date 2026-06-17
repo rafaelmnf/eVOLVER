@@ -4,7 +4,7 @@
 export type SensorType = 'temperature' | 'od' | 'agitation';
 export type DeviceStatus = 'active' | 'warning' | 'offline' | 'idle';
 export type AlertSeverity = 'critical' | 'warning' | 'info';
-export type ExperimentStatus = 'running' | 'paused' | 'completed' | 'error';
+export type ExperimentStatus = 'draft' | 'running' | 'paused' | 'completed' | 'error' | 'stopped';
 
 export interface SensorReading {
   value: number;
@@ -45,8 +45,10 @@ export interface Experiment {
   name: string;
   description: string;
   status: ExperimentStatus;
-  startedAt: string;
+  startedAt: string | null;
   endedAt: string | null;
+  createdAt: string;
+  updatedAt?: string;
   duration: string;
   slaveIds: string[];
   researcher: Researcher;
@@ -265,6 +267,7 @@ export const mockExperiments: Experiment[] = [
     status: 'running',
     startedAt: new Date(Date.now() - 18 * 3600 * 1000).toISOString(),
     endedAt: null,
+    createdAt: new Date(Date.now() - 18 * 3600 * 1000).toISOString(),
     duration: '18h 24m',
     slaveIds: ['slave-001', 'slave-002', 'slave-006'],
     alertCount: 1,
@@ -277,6 +280,7 @@ export const mockExperiments: Experiment[] = [
     status: 'running',
     startedAt: new Date(Date.now() - 6 * 3600 * 1000).toISOString(),
     endedAt: null,
+    createdAt: new Date(Date.now() - 6 * 3600 * 1000).toISOString(),
     duration: '6h 12m',
     slaveIds: ['slave-003', 'slave-005'],
     alertCount: 0,
@@ -289,6 +293,7 @@ export const mockExperiments: Experiment[] = [
     status: 'completed',
     startedAt: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
     endedAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+    createdAt: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
     duration: '72h 00m',
     slaveIds: [],
     alertCount: 5,

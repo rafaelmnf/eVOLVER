@@ -9,6 +9,7 @@ import { writeReading, getLatestReading } from "./services/influx";
 import { runMigrations } from "./config/migrate";
 import { registerExperimentRoutes } from "./routes/experiments";
 import { registerSlaveRoutes } from "./routes/slaves";
+import { registerAuthRoutes } from "./routes/authRoutes";
 
 async function startServer() {
   const app = createApp();
@@ -35,6 +36,7 @@ async function startServer() {
   // --- ROTAS DE API ---
   // Registradas antes do fallback SPA. As instâncias de WS/MQTT são injetadas
   // para que as rotas possam fazer broadcast e publicar comandos.
+  registerAuthRoutes(app);
   registerSlaveRoutes(app);
   registerExperimentRoutes(app, { wsService, mqttService });
 

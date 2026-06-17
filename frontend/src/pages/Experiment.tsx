@@ -15,6 +15,8 @@ import {
   getSensorLabel,
 } from '@/lib/mockData';
 import { useLiveData } from '@/contexts/LiveDataContext';
+import StatusBadge from '@/components/StatusBadge';
+import { formatDateTime } from '@/lib/utils';
 import {
   ResponsiveContainer,
   LineChart,
@@ -92,14 +94,6 @@ export default function Experiment() {
     value: p.value,
   }));
 
-  const statusConfig = {
-    running: { badge: 'ev-badge-active', label: 'Running', dot: 'var(--ev-green-primary)', pulse: true },
-    paused: { badge: 'ev-badge-warning', label: 'Paused', dot: '#d4a017', pulse: false },
-    completed: { badge: 'ev-badge-offline', label: 'Completed', dot: '#4a6a4a', pulse: false },
-    error: { badge: 'ev-badge-danger', label: 'Error', dot: '#e74c3c', pulse: false },
-  };
-  const stCfg = statusConfig[experiment.status];
-
   function handleResolve(alertId: string) {
     if (confirmingId === alertId) {
       resolveAlert(alertId);
@@ -140,17 +134,11 @@ export default function Experiment() {
               </p>
             </div>
           </div>
-          <span className={`${stCfg.badge} flex items-center gap-1.5 flex-shrink-0`}>
-            <span
-              className={`w-1.5 h-1.5 rounded-full inline-block ${stCfg.pulse ? 'animate-pulse-dot' : ''}`}
-              style={{ backgroundColor: stCfg.dot }}
-            />
-            {stCfg.label}
-          </span>
+          <StatusBadge status={experiment.status} />
         </div>
 
         <div className="grid grid-cols-4 gap-6 mt-5 pt-4" style={{ borderTop: '1px solid var(--ev-border-subtle)' }}>
-          <MetaItem label="Started" value={new Date(experiment.startedAt).toLocaleString('en-GB')} />
+          <MetaItem label="Started" value={formatDateTime(experiment.startedAt)} />
           <MetaItem label="Duration" value={experiment.duration} />
           <MetaItem label="Slave Nodes" value={String(experiment.slaveIds.length)} />
           <MetaItem label="Researcher" value={experiment.researcher.name} />
