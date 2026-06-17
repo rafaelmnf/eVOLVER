@@ -20,22 +20,17 @@ import { useLiveData } from '@/contexts/LiveDataContext';
 import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: Activity },
   { path: '/experimentos', label: 'Experiments', icon: FlaskConical },
-  { path: '/dispositivos', label: 'Devices', icon: Cpu },
-  { path: '/alertas', label: 'Alerts', icon: Bell },
-  { path: '/configuracoes', label: 'Settings', icon: Settings },
 ];
 
 export default function Sidebar() {
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
-  const { slaves, alerts, master, isConnected } = useLiveData();
+  const { slaves, master, isConnected } = useLiveData();
   const isMasterOnline = isConnected && master.status === 'active';
 
   const activeSlaves = slaves.filter(s => s.status === 'active').length;
   const offlineSlaves = slaves.filter(s => s.status === 'offline').length;
-  const unresolvedAlerts = alerts.filter(a => !a.resolved).length;
 
   const handleLogout = () => {
     logout();
@@ -99,13 +94,49 @@ export default function Sidebar() {
         </div>
       </div>
 
+      {/* Researcher Profile card (more highlighted below Master) */}
+      <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--ev-border-subtle)' }}>
+        <div className="ev-card-elevated p-3 rounded flex flex-col gap-3" style={{ boxShadow: '0 0 10px rgba(29, 185, 84, 0.05)' }}>
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+              style={{
+                backgroundColor: 'var(--ev-green-dim)',
+                border: '1px solid var(--ev-green-primary)',
+                color: 'var(--ev-green-primary)',
+                fontFamily: 'IBM Plex Mono, monospace',
+              }}
+            >
+              {user?.name ? user.name.substring(0, 2).toUpperCase() : 'PE'}
+            </div>
+            <div className="flex flex-col overflow-hidden">
+              <span className="ev-label" style={{ fontSize: '0.6rem' }}>Pesquisador</span>
+              <span className="text-sm font-bold truncate text-[var(--ev-text-primary)]" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                {user?.name || 'Pesquisador'}
+              </span>
+              <span className="text-xs truncate text-[var(--ev-text-secondary)] font-mono">
+                {user?.email || 'user@evolver'}
+              </span>
+            </div>
+          </div>
+          <div className="pt-2 border-t border-[var(--ev-border-subtle)] flex justify-end">
+            <button
+              onClick={handleLogout}
+              className="text-xs flex items-center gap-1.5 text-[var(--ev-danger)] hover:underline cursor-pointer font-semibold transition-colors"
+            >
+              <LogOut size={12} />
+              Sair da conta
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
-        <div className="ev-label px-3 mb-3">Navigation</div>
+        <div className="ev-label px-3 mb-3 font-semibold uppercase tracking-wider">Navegação</div>
         <ul className="space-y-1">
           {navItems.map(({ path, label, icon: Icon }) => {
-            const isActive = location === path || (path === '/experimentos' && location.startsWith('/experimento')) || (path !== '/dashboard' && location.startsWith(path));
-            const isAlerts = path === '/alertas';
+            const isActive = location === path || (path === '/experimentos' && location.startsWith('/experimento'));
             return (
               <li key={path}>
                 <Link href={path}>
@@ -132,15 +163,7 @@ export default function Sidebar() {
                     }}
                   >
                     <Icon size={16} />
-                    <span className="flex-1">{label}</span>
-                    {isAlerts && unresolvedAlerts > 0 && (
-                      <span
-                        className="text-xs px-1.5 py-0.5 rounded-full font-mono font-bold"
-                        style={{ backgroundColor: '#3d0a0a', color: '#e74c3c', fontSize: '0.65rem' }}
-                      >
-                        {unresolvedAlerts}
-                      </span>
-                    )}
+                    <span className="flex-1">{label === 'Experiments' ? 'Experimentos' : label}</span>
                     {isActive && <ChevronRight size={12} style={{ opacity: 0.5 }} />}
                   </div>
                 </Link>
@@ -151,12 +174,12 @@ export default function Sidebar() {
 
         {/* Slave Summary */}
         <div className="mt-6">
-          <div className="ev-label px-3 mb-3">Slave Nodes</div>
+          <div className="ev-label px-3 mb-3">Slaves do Sistema</div>
           <div className="px-3 space-y-2">
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2" style={{ color: 'var(--ev-text-secondary)' }}>
                 <Wifi size={12} style={{ color: 'var(--ev-green-primary)' }} />
-                Active
+                Ativas
               </div>
               <span
                 className="font-mono font-bold"
@@ -183,33 +206,16 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* Footer / User Profile */}
+      {/* Footer */}
       <div
-        className="px-4 py-3"
+        className="px-4 py-3 mt-auto"
         style={{
           borderTop: '1px solid var(--ev-border-subtle)',
-          backgroundColor: 'var(--ev-bg-card)',
+          backgroundColor: 'rgba(255,255,255,0.01)',
         }}
       >
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex flex-col overflow-hidden">
-            <span className="text-sm font-semibold truncate" style={{ color: 'var(--ev-text-primary)' }}>
-              {user?.name || 'Pesquisador'}
-            </span>
-            <span className="text-xs truncate" style={{ color: 'var(--ev-text-muted)' }}>
-              {user?.email || 'user@evolver'}
-            </span>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="p-1.5 rounded hover:bg-red-500/10 transition-colors"
-            title="Sair"
-          >
-            <LogOut size={16} style={{ color: 'var(--ev-danger)' }} />
-          </button>
-        </div>
-        <div className="text-[0.65rem] flex justify-between mt-2 pt-2 border-t" style={{ borderColor: 'var(--ev-border-subtle)', color: 'var(--ev-text-muted)', fontFamily: 'IBM Plex Mono, monospace' }}>
-          <span>eVOLVER v0.0.0</span>
+        <div className="text-[0.65rem] flex justify-between" style={{ color: 'var(--ev-text-muted)', fontFamily: 'IBM Plex Mono, monospace' }}>
+          <span>eVOLVER v1.0.0</span>
           <span>© 2026 Lab Systems</span>
         </div>
       </div>

@@ -4,7 +4,7 @@
 export type SensorType = 'temperature' | 'od' | 'agitation';
 export type DeviceStatus = 'active' | 'warning' | 'offline' | 'idle';
 export type AlertSeverity = 'critical' | 'warning' | 'info';
-export type ExperimentStatus = 'running' | 'paused' | 'completed' | 'error';
+export type ExperimentStatus = 'draft' | 'running' | 'paused' | 'completed' | 'error';
 
 export interface SensorReading {
   value: number;
@@ -45,8 +45,10 @@ export interface Experiment {
   name: string;
   description: string;
   status: ExperimentStatus;
-  startedAt: string;
+  startedAt: string | null;
   endedAt: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   duration: string;
   slaveIds: string[];
   researcher: Researcher;

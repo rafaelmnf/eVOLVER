@@ -15,7 +15,7 @@ export default function Login() {
     e.preventDefault();
     if (email && password) {
       login(email);
-      setLocation("/dashboard");
+      setLocation("/experimentos");
     }
   };
 

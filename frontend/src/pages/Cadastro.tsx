@@ -23,7 +23,7 @@ export default function Cadastro() {
     }
     if (email && password && name) {
       register({ name, email, cpf, endereco });
-      setLocation("/dashboard");
+      setLocation("/experimentos");
     }
   };
 

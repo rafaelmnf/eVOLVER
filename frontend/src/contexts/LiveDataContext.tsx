@@ -187,6 +187,52 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
             setExperiments((prev) => prev.filter((e) => e.id !== id));
           }
 
+          if (message.type === "SLAVES_LINKED") {
+            const { experimentId, slaveIds } = message.data;
+            setExperiments((prev) =>
+              prev.map((e) =>
+                e.id === experimentId
+                  ? { ...e, slaveIds }
+                  : e
+              )
+            );
+            setSlaves((prev) =>
+              prev.map((s) => {
+                if (slaveIds.includes(s.id)) {
+                  return { ...s, experimentId };
+                } else if (s.experimentId === experimentId) {
+                  return { ...s, experimentId: null, status: "idle" as const };
+                }
+                return s;
+              })
+            );
+          }
+          
+          if (message.type === "EXPERIMENT_STARTED" || message.type === "EXPERIMENT_UPDATED") {
+            const { id, status, startedAt, slaveIds } = message.data;
+            setExperiments((prev) =>
+              prev.map((e) =>
+                e.id === id
+                  ? {
+                      ...e,
+                      status,
+                      startedAt: startedAt || e.startedAt,
+                      slaveIds: slaveIds || e.slaveIds,
+                    }
+                  : e
+              )
+            );
+            if (slaveIds) {
+              setSlaves((prev) =>
+                prev.map((s) =>
+                  slaveIds.includes(s.id) && s.status !== "offline"
+                    ? { ...s, status: status === "running" ? ("active" as const) : s.status }
+                    : s
+                )
+              );
+            }
+          }
+
           if (message.type === "SLAVE_HELLO") {
             const { id, hostname, ip, timestamp } = message.data;
             setSlaves((prev) => {
