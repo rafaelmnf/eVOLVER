@@ -6,13 +6,15 @@ import { ChevronRight, X, FlaskConical, Trash2, Check } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import StatusBadge from '@/components/StatusBadge';
 import Fab from '@/components/Fab';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, validateDataSendInterval, DATA_SEND_INTERVAL_RANGE } from '@/lib/utils';
 
 export default function Experiments() {
   const { experiments, slaves, deleteExperiment } = useLiveData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newExpName, setNewExpName] = useState('');
   const [newExpDesc, setNewExpDesc] = useState('');
+  // Intervalo de envio (segundos) do experimento — string p/ permitir campo vazio.
+  const [newExpInterval, setNewExpInterval] = useState('');
   const [selectedSlaves, setSelectedSlaves] = useState<Set<string>>(new Set());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -25,15 +27,20 @@ export default function Experiments() {
   const openModal = () => {
     setNewExpName('');
     setNewExpDesc('');
+    setNewExpInterval('');
     setSelectedSlaves(new Set());
     setCreateError('');
     setIsModalOpen(true);
   };
 
+  // Valor numérico do intervalo (ou null se vazio/inválido) + erro de validação.
+  const intervalNum = newExpInterval.trim() === '' ? null : Number(newExpInterval);
+  const intervalError = validateDataSendInterval(intervalNum);
+
   const handleCreate = async () => {
     if (!user) return;
-    // Validação: nome obrigatório e pelo menos 1 slave
-    if (!newExpName.trim() || selectedSlaves.size === 0) return;
+    // Validação: nome obrigatório, pelo menos 1 slave e intervalo de envio válido
+    if (!newExpName.trim() || selectedSlaves.size === 0 || intervalError) return;
     setCreateError('');
     setCreating(true);
     try {
@@ -44,6 +51,7 @@ export default function Experiments() {
           name: newExpName.trim(),
           description: newExpDesc,
           slaveIds: Array.from(selectedSlaves),
+          dataSendInterval: intervalNum,
           researcherId: user.id,
         }),
       });
@@ -259,6 +267,25 @@ export default function Experiments() {
               </div>
 
               <div>
+                <label className="ev-label block mb-1">
+                  Tempo de envio de dados (s) * — {DATA_SEND_INTERVAL_RANGE.min}–{DATA_SEND_INTERVAL_RANGE.max}
+                </label>
+                <input
+                  type="number"
+                  min={DATA_SEND_INTERVAL_RANGE.min}
+                  max={DATA_SEND_INTERVAL_RANGE.max}
+                  value={newExpInterval}
+                  onChange={e => setNewExpInterval(e.target.value)}
+                  className="w-full bg-transparent border rounded px-3 py-2 text-sm focus:outline-none transition-colors"
+                  style={{ borderColor: intervalError && newExpInterval.trim() !== '' ? 'var(--ev-danger)' : 'var(--ev-border-subtle)', color: 'var(--ev-text-primary)' }}
+                  placeholder={`Ex: ${DATA_SEND_INTERVAL_RANGE.min}`}
+                />
+                {intervalError && newExpInterval.trim() !== '' && (
+                  <p className="text-xs mt-1" style={{ color: 'var(--ev-danger)' }}>{intervalError}</p>
+                )}
+              </div>
+
+              <div>
                 <label className="ev-label block mb-2">Slaves disponíveis *</label>
                 <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
                   {slaves.map(slave => {
@@ -326,7 +353,7 @@ export default function Experiments() {
               </button>
               <button
                 onClick={handleCreate}
-                disabled={!newExpName.trim() || selectedSlaves.size === 0 || creating}
+                disabled={!newExpName.trim() || selectedSlaves.size === 0 || !!intervalError || creating}
                 className="px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                 style={{ backgroundColor: 'var(--ev-green-primary)', color: 'var(--ev-bg-primary)' }}
               >

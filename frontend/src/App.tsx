@@ -14,9 +14,6 @@ import Dashboard from "./pages/Dashboard";
 import Experiments from "./pages/Experiments";
 import Experiment from "./pages/Experiment";
 import ConfigureExperiment from "./pages/ConfigureExperiment";
-import Devices from "./pages/Devices";
-import Alerts from "./pages/Alerts";
-import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Cadastro from "./pages/Cadastro";
@@ -47,10 +44,7 @@ function Router() {
       <Route path="/experimentos"><ProtectedRoute component={Experiments} /></Route>
       <Route path="/experimento/:id/configurar"><ProtectedRoute component={ConfigureExperiment} /></Route>
       <Route path="/experimento/:id"><ProtectedRoute component={Experiment} /></Route>
-      <Route path="/dispositivos"><ProtectedRoute component={Devices} /></Route>
-      <Route path="/alertas"><ProtectedRoute component={Alerts} /></Route>
-      <Route path="/configuracoes"><ProtectedRoute component={Settings} /></Route>
-      
+
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

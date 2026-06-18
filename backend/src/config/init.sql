@@ -22,6 +22,8 @@ CREATE TABLE experiments (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     status experiment_status DEFAULT 'draft',
+    -- Intervalo de envio de dados das slaves do experimento, em segundos (20–200).
+    data_send_interval INTEGER DEFAULT 20,
     started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     ended_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

@@ -6,7 +6,6 @@ import { WebSocketService } from "./services/websocket";
 import { MQTTService } from "./services/mqtt";
 import { query } from "./services/db";
 import { writeReading, getLatestReading } from "./services/influx";
-import { runMigrations } from "./config/migrate";
 import { registerExperimentRoutes } from "./routes/experiments";
 import { registerSlaveRoutes } from "./routes/slaves";
 import { registerAuthRoutes } from "./routes/authRoutes";
@@ -17,9 +16,6 @@ async function startServer() {
 
   const wsService = new WebSocketService(server);
   const mqttService = new MQTTService();
-
-  // Garante alterações de schema em bancos já existentes (idempotente)
-  await runMigrations();
 
   // Seed/ensure Master exists in PostgreSQL database
   try {
@@ -77,7 +73,7 @@ async function startServer() {
     try {
       // Busca o slave existente no banco para ver se tem experimento pendente
       const existing = await query(
-        `SELECT s.id, s.hostname, s.ip, s.experiment_id, e.status AS exp_status
+        `SELECT s.id, s.hostname, s.ip, s.experiment_id, e.status AS exp_status, e.data_send_interval
          FROM slaves s
          LEFT JOIN experiments e ON e.id = s.experiment_id
          WHERE s.hostname = $1`,
@@ -85,6 +81,8 @@ async function startServer() {
       );
 
       const prev = existing.rows[0];
+      // Só reativa automaticamente se o experimento estiver 'running'. Se estiver
+      // 'paused', a slave volta como idle e PERMANECE pausada (decisão do pesquisador).
       const hasActiveExperiment = prev?.experiment_id && prev?.exp_status === "running";
 
       if (hasActiveExperiment) {
@@ -98,6 +96,8 @@ async function startServer() {
         mqttService.publish(topico, {
           comando: "iniciar_experimento",
           experimentId: prev.experiment_id,
+          // Reaplica o intervalo do experimento após reconexão (volta a ativo, nunca pausa).
+          intervalo: prev.data_send_interval ?? 20,
         });
 
         console.log(`🔄 [MQTT HELLO] Slave '${data.hostname}' reconectou ao experimento ${prev.experiment_id} → comando reenviado.`);
@@ -154,14 +154,15 @@ async function startServer() {
       const isWarning = temp > 38.5 || temp < 30.0;
       const status = isWarning ? "warning" : "active";
 
+      // Uma leitura recebida significa, por definição, que a slave está online.
+      // Portanto sempre promovemos para 'active'/'warning' — inclusive quando ela
+      // estava 'offline' (ex.: Mosquitto religado) ou 'idle'. Isso destrava a
+      // reconexão e reabilita a edição no front. (Bug: status preso em offline.)
       const result = await query(
         `INSERT INTO slaves (hostname, master_id, ip, status, last_seen)
          VALUES ($1, (SELECT id FROM masters WHERE hostname = 'eMaster' LIMIT 1), $2, $3, NOW())
          ON CONFLICT (hostname) DO UPDATE
-         SET status = CASE
-               WHEN slaves.status IN ('idle', 'offline') THEN slaves.status
-               ELSE EXCLUDED.status
-             END,
+         SET status = EXCLUDED.status,
              last_seen = EXCLUDED.last_seen
          RETURNING id, master_id, experiment_id, hostname, ip, status, last_seen`,
         [data.origem, "Connected", status]
