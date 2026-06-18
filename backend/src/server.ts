@@ -6,7 +6,6 @@ import { WebSocketService } from "./services/websocket";
 import { MQTTService } from "./services/mqtt";
 import { query } from "./services/db";
 import { writeReading, getLatestReading } from "./services/influx";
-import { runMigrations } from "./config/migrate";
 import { registerExperimentRoutes } from "./routes/experiments";
 import { registerSlaveRoutes } from "./routes/slaves";
 import { registerAuthRoutes } from "./routes/authRoutes";
@@ -17,10 +16,6 @@ async function startServer() {
 
   const wsService = new WebSocketService(server);
   const mqttService = new MQTTService();
-
-  // Garante alterações de schema em bancos já existentes (idempotente)
-  await runMigrations();
-
   // Seed/ensure Master exists in PostgreSQL database
   try {
     await query(`
