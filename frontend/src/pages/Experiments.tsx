@@ -2,8 +2,11 @@ import { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Link, useLocation } from 'wouter';
 import { useLiveData } from '@/contexts/LiveDataContext';
-import { ChevronRight, Plus, X, FlaskConical, Trash2 } from 'lucide-react';
+import { ChevronRight, X, FlaskConical, Trash2, Check } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import StatusBadge from '@/components/StatusBadge';
+import Fab from '@/components/Fab';
+import { formatDateTime } from '@/lib/utils';
 
 export default function Experiments() {
   const { experiments, slaves, deleteExperiment } = useLiveData();
@@ -16,26 +19,47 @@ export default function Experiments() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
+  const [createError, setCreateError] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const openModal = () => {
+    setNewExpName('');
+    setNewExpDesc('');
+    setSelectedSlaves(new Set());
+    setCreateError('');
+    setIsModalOpen(true);
+  };
+
   const handleCreate = async () => {
     if (!user) return;
+    // Validação: nome obrigatório e pelo menos 1 slave
+    if (!newExpName.trim() || selectedSlaves.size === 0) return;
+    setCreateError('');
+    setCreating(true);
     try {
       const res = await fetch('/api/experiments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: newExpName || 'Untitled Experiment',
+          name: newExpName.trim(),
           description: newExpDesc,
           slaveIds: Array.from(selectedSlaves),
-          researcherName: user.name,
+          researcherId: user.id,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: 'Erro ao criar experimento.' }));
+        throw new Error(error || 'Erro ao criar experimento.');
+      }
       const { id: newId } = await res.json();
       // LiveDataContext recebe EXPERIMENT_CREATED via WebSocket e atualiza o estado
       setIsModalOpen(false);
-      setLocation(`/experimento/${newId}`);
+      setLocation(`/experimento/${newId}/configurar`);
     } catch (err) {
       console.error('❌ Erro ao criar experimento:', err);
+      setCreateError(err instanceof Error ? err.message : 'Erro ao criar experimento.');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -49,27 +73,8 @@ export default function Experiments() {
   };
   return (
     <DashboardLayout
-      title="Experiments"
-      subtitle="View and manage all bioreactor experiments"
-      headerRight={
-        <button
-          onClick={() => {
-            setNewExpName('');
-            setNewExpDesc('');
-            setSelectedSlaves(new Set());
-            setIsModalOpen(true);
-          }}
-          className="flex items-center gap-2 text-xs px-3 py-2 rounded transition-all duration-200"
-          style={{
-            backgroundColor: 'var(--ev-green-dim)',
-            border: '1px solid var(--ev-green-muted)',
-            color: 'var(--ev-green-primary)',
-          }}
-        >
-          <Plus size={14} />
-          New Experiment
-        </button>
-      }
+      title="Meus Experimentos"
+      subtitle="Visualize e gerencie todos os experimentos de biorreatores"
     >
       {experiments.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 rounded ev-card" style={{ border: '1px dashed var(--ev-border-subtle)', backgroundColor: 'var(--ev-bg-card)' }}>
@@ -103,32 +108,16 @@ export default function Experiments() {
                       {exp.description}
                     </div>
                   </div>
-                  {exp.status === 'running' ? (
-                    <span className="ev-badge-active ml-3 flex-shrink-0 flex items-center gap-1">
-                      <span
-                        className="w-1.5 h-1.5 rounded-full inline-block animate-pulse-dot"
-                        style={{ backgroundColor: 'var(--ev-green-primary)' }}
-                      />
-                      Running
-                    </span>
-                  ) : exp.status === 'completed' ? (
-                    <span className="ev-badge ml-3 flex-shrink-0 flex items-center gap-1" style={{ backgroundColor: 'var(--ev-bg-card)', color: 'var(--ev-text-muted)', border: '1px solid var(--ev-border-subtle)' }}>
-                      Completed
-                    </span>
-                  ) : (
-                    <span className="ev-badge ml-3 flex-shrink-0 flex items-center gap-1" style={{ backgroundColor: 'var(--ev-bg-card)', color: 'var(--ev-text-muted)', border: '1px solid var(--ev-border-subtle)' }}>
-                      {exp.status.charAt(0).toUpperCase() + exp.status.slice(1)}
-                    </span>
-                  )}
+                  <StatusBadge status={exp.status} className="ml-3" />
                 </div>
 
                 <div className="flex items-center gap-6 text-xs">
                   <div>
-                    <div className="ev-label mb-0.5">Duration</div>
+                    <div className="ev-label mb-0.5">Criado em</div>
                     <div
                       style={{ fontFamily: 'IBM Plex Mono, monospace', color: 'var(--ev-text-secondary)' }}
                     >
-                      {exp.duration}
+                      {formatDateTime(exp.createdAt)}
                     </div>
                   </div>
                   <div>
@@ -242,43 +231,43 @@ export default function Experiments() {
               <X size={20} />
             </button>
             <h2 className="text-xl font-bold mb-4" style={{ fontFamily: 'Space Grotesk, monospace', color: 'var(--ev-text-primary)' }}>
-              New Experiment
+              Novo Experimento
             </h2>
-            
+
             <div className="space-y-4">
               <div>
-                <label className="ev-label block mb-1">Name</label>
+                <label className="ev-label block mb-1">Nome *</label>
                 <input
                   type="text"
                   value={newExpName}
                   onChange={e => setNewExpName(e.target.value)}
                   className="w-full bg-transparent border rounded px-3 py-2 text-sm focus:outline-none transition-colors"
                   style={{ borderColor: 'var(--ev-border-subtle)', color: 'var(--ev-text-primary)' }}
-                  placeholder="E. coli Growth Curve"
+                  placeholder="Ex: Curva de crescimento de E. coli"
                 />
               </div>
-              
+
               <div>
-                <label className="ev-label block mb-1">Description</label>
+                <label className="ev-label block mb-1">Descrição</label>
                 <textarea
                   value={newExpDesc}
                   onChange={e => setNewExpDesc(e.target.value)}
                   className="w-full bg-transparent border rounded px-3 py-2 text-sm focus:outline-none h-20 resize-none transition-colors"
                   style={{ borderColor: 'var(--ev-border-subtle)', color: 'var(--ev-text-primary)' }}
-                  placeholder="Experiment description..."
+                  placeholder="Descrição do experimento..."
                 />
               </div>
 
               <div>
-                <label className="ev-label block mb-2">Available Slave Nodes</label>
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                <label className="ev-label block mb-2">Slaves disponíveis *</label>
+                <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
                   {slaves.map(slave => {
                     const isAvailable = slave.experimentId === null && slave.status !== 'offline';
                     const isSelected = selectedSlaves.has(slave.id);
                     return (
                       <div
                         key={slave.id}
-                        className={`flex items-center justify-between p-2 rounded border transition-colors duration-200 ${isAvailable ? 'cursor-pointer hover:bg-white/5' : 'opacity-40 cursor-not-allowed'}`}
+                        className={`flex items-center gap-2 p-2 rounded border transition-colors duration-200 ${isAvailable ? 'cursor-pointer hover:bg-white/5' : 'opacity-40 cursor-not-allowed'}`}
                         style={{
                           borderColor: isSelected ? 'var(--ev-green-primary)' : 'var(--ev-border-subtle)',
                           backgroundColor: isSelected ? 'var(--ev-green-dim)' : 'transparent'
@@ -291,21 +280,41 @@ export default function Experiments() {
                           setSelectedSlaves(next);
                         }}
                       >
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium" style={{ fontFamily: 'IBM Plex Mono, monospace', color: 'var(--ev-text-primary)' }}>{slave.hostname}</span>
-                          <span className="text-xs" style={{ color: 'var(--ev-text-muted)' }}>{slave.ip}</span>
-                        </div>
-                        <span className="text-xs" style={{ color: isAvailable ? (isSelected ? 'var(--ev-green-primary)' : 'var(--ev-text-muted)') : '#d4a017' }}>
-                          {isAvailable
-                            ? (isSelected ? '✓ Selected' : slave.status === 'idle' ? 'Idle — Disponível' : 'Active')
-                            : (slave.status === 'offline' ? 'Offline' : 'In Use')}
+                        {/* Checkbox visual */}
+                        <span
+                          className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
+                          style={{
+                            border: `1px solid ${isSelected ? 'var(--ev-green-primary)' : 'var(--ev-border-default)'}`,
+                            backgroundColor: isSelected ? 'var(--ev-green-primary)' : 'transparent',
+                          }}
+                        >
+                          {isSelected && <Check size={11} strokeWidth={3} style={{ color: 'var(--ev-bg-primary)' }} />}
                         </span>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-sm font-medium truncate" style={{ fontFamily: 'IBM Plex Mono, monospace', color: 'var(--ev-text-primary)' }}>{slave.hostname}</span>
+                          <span className="text-xs truncate" style={{ color: isAvailable ? 'var(--ev-text-muted)' : '#d4a017' }}>
+                            {isAvailable
+                              ? (slave.status === 'idle' ? 'Disponível' : 'Ativo')
+                              : (slave.status === 'offline' ? 'Offline' : 'Em uso')}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
+                {slaves.length === 0 && (
+                  <p className="text-xs mt-1" style={{ color: 'var(--ev-text-muted)' }}>
+                    Nenhuma slave registrada.
+                  </p>
+                )}
               </div>
             </div>
+
+            {createError && (
+              <p className="text-sm mt-3" style={{ color: 'var(--ev-danger)' }}>
+                {createError}
+              </p>
+            )}
 
             <div className="mt-6 flex justify-end gap-3 pt-4" style={{ borderTop: '1px solid var(--ev-border-subtle)' }}>
               <button
@@ -313,20 +322,23 @@ export default function Experiments() {
                 className="px-4 py-2 rounded text-sm transition-colors hover:bg-white/5"
                 style={{ color: 'var(--ev-text-muted)', border: '1px solid var(--ev-border-subtle)' }}
               >
-                Cancel
+                Cancelar
               </button>
               <button
                 onClick={handleCreate}
-                disabled={!newExpName || selectedSlaves.size === 0}
+                disabled={!newExpName.trim() || selectedSlaves.size === 0 || creating}
                 className="px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                 style={{ backgroundColor: 'var(--ev-green-primary)', color: 'var(--ev-bg-primary)' }}
               >
-                Create
+                {creating ? 'Criando...' : 'Criar'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* FAB — criar novo experimento */}
+      <Fab onClick={openModal} title="Novo experimento" />
     </DashboardLayout>
   );
 }

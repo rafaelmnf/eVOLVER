@@ -1,7 +1,7 @@
 -- Status e Tipos
 CREATE TYPE device_status AS ENUM ('active', 'warning', 'offline', 'idle');
 CREATE TYPE alert_severity AS ENUM ('critical', 'warning', 'info');
-CREATE TYPE experiment_status AS ENUM ('running', 'paused', 'completed', 'error');
+CREATE TYPE experiment_status AS ENUM ('draft', 'running', 'paused', 'completed', 'error', 'stopped');
 CREATE TYPE sensor_type AS ENUM ('temperature', 'od', 'agitation');
 
 -- Tabela de Usuários (Pesquisadores)
@@ -21,7 +21,7 @@ CREATE TABLE experiments (
     researcher_id UUID REFERENCES users(id) ON DELETE SET NULL,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    status experiment_status DEFAULT 'running',
+    status experiment_status DEFAULT 'draft',
     started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     ended_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -59,6 +59,8 @@ CREATE TABLE slave_sensor_configs (
     target_value NUMERIC(10, 4), -- O valor desejado que queremos setar no atuador (ex: 230 RPM ou 37°C)
     min_limit NUMERIC(10, 4),    -- Limite inferior para disparo de alertas (ex: 35°C)
     max_limit NUMERIC(10, 4),    -- Limite superior para disparo de alertas (ex: 40°C)
+    feed_pump_time NUMERIC(10, 2),  -- Tempo de acionamento da bomba de alimentação em segundos (usado quando sensor = 'od')
+    waste_pump_time NUMERIC(10, 2), -- Tempo de acionamento da bomba de coleta/descarte em segundos (usado quando sensor = 'od')
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT unique_slave_sensor UNIQUE (slave_id, sensor)
 );

@@ -24,11 +24,21 @@ export interface SensorHistories {
 /**
  * Writes temperature and OD measurements to InfluxDB
  */
-export async function writeReading(slaveId: string, temp: number, densidade: number): Promise<void> {
+export async function writeReading(
+  slaveId: string,
+  temp: number,
+  densidade: number,
+  rotacao?: number
+): Promise<void> {
   const point = new Point("sensors")
     .tag("slave_id", slaveId)
     .floatField("temperature", temp)
     .floatField("od", densidade);
+
+  // RPM/agitação só é gravado a partir de agora (dados antigos não têm este field)
+  if (typeof rotacao === "number" && !Number.isNaN(rotacao)) {
+    point.floatField("rotacao", rotacao);
+  }
 
   writeApi.writePoint(point);
   await writeApi.flush();
@@ -115,4 +125,37 @@ export async function getSensorHistory(slaveId: string): Promise<SensorHistories
   }
 
   return histories;
+}
+
+/**
+ * Retrieves the history of a single field ("temperature" | "od" | "rotacao") for a slave.
+ * Usado pela rota GET /api/experiments/:id/data?category=tp|do|rpm.
+ * Para "rotacao", dados antigos não possuem o field — o retorno será vazio (sem erro).
+ */
+export async function getHistoryByField(slaveId: string, field: string): Promise<HistoryPoint[]> {
+  const points: HistoryPoint[] = [];
+
+  const fluxQuery = `
+    from(bucket: "${config.influxBucket}")
+      |> range(start: -30d)
+      |> filter(fn: (r) => r["_measurement"] == "sensors" and r["slave_id"] == "${slaveId}")
+      |> filter(fn: (r) => r["_field"] == "${field}")
+      |> sort(columns: ["_time"], desc: false)
+      |> tail(n: 200)
+  `;
+
+  try {
+    const rows = await queryApi.collectRows<any>(fluxQuery);
+    if (rows && rows.length > 0) {
+      rows.forEach((row) => {
+        if (typeof row._value === "number") {
+          points.push({ timestamp: row._time, value: row._value });
+        }
+      });
+    }
+  } catch (error) {
+    console.error(`❌ [InfluxDB Service] Error fetching field "${field}" for ${slaveId}:`, error);
+  }
+
+  return points;
 }
