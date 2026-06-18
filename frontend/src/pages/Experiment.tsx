@@ -4,18 +4,25 @@
  * Recharts with green-on-dark styling
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'wouter';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  mockTimeSeries,
   Alert,
+  AlertSeverity,
+  SensorType,
   formatRelativeTime,
   getSensorLabel,
 } from '@/lib/mockData';
 import { useLiveData } from '@/contexts/LiveDataContext';
 import StatusBadge from '@/components/StatusBadge';
+import SlaveConfigForm, {
+  SlaveConfig,
+  emptySlaveConfig,
+  mapApiConfigToForm,
+  buildConfigPayload,
+} from '@/components/SlaveConfigForm';
 import { formatDateTime } from '@/lib/utils';
 import {
   ResponsiveContainer,
@@ -37,9 +44,20 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  Play,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 type SensorTab = 'temperature' | 'od' | 'agitation';
+
+// Mapeia a tab do gráfico para a categoria esperada pelo GET /api/experiments/:id/data
+const TAB_TO_CATEGORY: Record<SensorTab, 'tp' | 'do' | 'rpm'> = {
+  temperature: 'tp',
+  od: 'do',
+  agitation: 'rpm',
+};
+
+interface ChartPoint { time: string; value: number; }
 
 const sensorConfig: Record<SensorTab, { label: string; unit: string; color: string; refMin?: number; refMax?: number }> = {
   temperature: { label: 'Temperature', unit: '°C', color: '#1db954', refMin: 36, refMax: 38.5 },
@@ -49,20 +67,78 @@ const sensorConfig: Record<SensorTab, { label: string; unit: string; color: stri
 
 export default function Experiment() {
   const params = useParams<{ id: string }>();
-  const { user } = useAuth();
+  useAuth();
   const { experiments, alerts, slaves, resolveAlert } = useLiveData();
   const expId = params.id ?? 'exp-001';
   const experiment = experiments.find(e => e.id === expId) ?? experiments[0];
-  const expAlerts = alerts.filter(a => a.experimentId === expId);
   const expSlaves = slaves.filter(s => experiment?.slaveIds.includes(s.id));
 
   const [activeTab, setActiveTab] = useState<SensorTab>('temperature');
-
-  const [activeSlave, setActiveSlave] = useState(expSlaves[0]?.id ?? 'slave-001');
+  const [activeSlave, setActiveSlave] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
-  // No researchers state needed, we just read from experiment.researcher
-  
+
+  // --- Gráficos: dados do GET /data por tab/slave + merge ao vivo do WebSocket ---
+  const [apiChart, setApiChart] = useState<ChartPoint[]>([]);
+
+  // --- Alertas persistidos (GET) mesclados com os client-side (useLiveData) ---
+  const [apiAlerts, setApiAlerts] = useState<Alert[]>([]);
+
+  // --- Iniciar experimento (draft -> running) ---
+  const [starting, setStarting] = useState(false);
+
+  // --- Painel "Configuração de variáveis" (reuso do SlaveConfigForm) ---
+  const [showConfigPanel, setShowConfigPanel] = useState(false);
+  const [panelConfig, setPanelConfig] = useState<SlaveConfig>(emptySlaveConfig());
+  const [savingPanel, setSavingPanel] = useState(false);
+
+  // Seleciona o primeiro slave do experimento quando disponível
+  useEffect(() => {
+    if (!activeSlave && expSlaves.length > 0) setActiveSlave(expSlaves[0].id);
+  }, [expSlaves, activeSlave]);
+
+  // Busca o histórico do backend ao trocar de tab/slave/experimento
+  useEffect(() => {
+    if (!experiment || !activeSlave) return;
+    let cancelled = false;
+    const category = TAB_TO_CATEGORY[activeTab];
+    fetch(`/api/experiments/${experiment.id}/data?category=${category}`)
+      .then(res => (res.ok ? res.json() : { series: [] }))
+      .then(data => {
+        if (cancelled) return;
+        const series = (data.series || []).find((s: any) => s.slaveId === activeSlave) || (data.series || [])[0];
+        const points: ChartPoint[] = (series?.points || []).map((p: any) => ({
+          time: new Date(p.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+          value: p.value,
+        }));
+        setApiChart(points);
+      })
+      .catch(() => { if (!cancelled) setApiChart([]); });
+    return () => { cancelled = true; };
+  }, [experiment?.id, activeSlave, activeTab]);
+
+  // Busca os alertas persistidos do experimento
+  useEffect(() => {
+    if (!experiment) return;
+    let cancelled = false;
+    fetch(`/api/experiments/${experiment.id}/alerts`)
+      .then(res => (res.ok ? res.json() : []))
+      .then((rows: any[]) => { if (!cancelled) setApiAlerts(rows.map(mapApiAlert)); })
+      .catch(() => { if (!cancelled) setApiAlerts([]); });
+    return () => { cancelled = true; };
+  }, [experiment?.id]);
+
+  // Pré-carrega a config do slave ativo ao abrir o painel
+  useEffect(() => {
+    if (!showConfigPanel || !activeSlave) return;
+    let cancelled = false;
+    fetch(`/api/slaves/${activeSlave}/config`)
+      .then(res => (res.ok ? res.json() : { config: null }))
+      .then(data => { if (!cancelled) setPanelConfig(mapApiConfigToForm(data?.config)); })
+      .catch(() => { if (!cancelled) setPanelConfig(emptySlaveConfig()); });
+    return () => { cancelled = true; };
+  }, [showConfigPanel, activeSlave]);
+
   if (!experiment) {
     return (
       <DashboardLayout title="Experiment" subtitle="Experiment not found">
@@ -79,20 +155,52 @@ export default function Experiment() {
     );
   }
 
-  const slaveSensor = activeSlave ? slaves.find(s => s.id === activeSlave)?.sensors[activeTab] : null;
-  const timeSeriesData = mockTimeSeries[activeSlave]?.[activeTab] ?? 
-    (slaveSensor?.history.map((v, i) => ({
-      timestamp: new Date(Date.now() - (slaveSensor.history.length - i) * 60000).toISOString(),
-      value: v
-    })) ?? []);
+  const expAlerts = mergeAlerts(apiAlerts, alerts.filter(a => a.experimentId === expId));
 
   const cfg = sensorConfig[activeTab];
 
-  // Format chart data
-  const chartData = timeSeriesData.map(p => ({
-    time: new Date(p.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-    value: p.value,
-  }));
+  // Histórico ao vivo (WebSocket) do sensor da tab atual, usado como fallback e para
+  // estender a curva do backend com os pontos mais recentes recebidos via MQTT.
+  const liveSensor = activeSlave ? slaves.find(s => s.id === activeSlave)?.sensors[activeTab] : null;
+  const liveTail: ChartPoint[] = liveSensor
+    ? liveSensor.history.map((v, i) => ({
+        time: new Date(Date.now() - (liveSensor.history.length - 1 - i) * 60000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+        value: v,
+      }))
+    : [];
+  // Merge: base do backend + cauda ao vivo (quando há base) ou só a cauda ao vivo.
+  const chartData: ChartPoint[] = apiChart.length > 0 ? [...apiChart, ...liveTail] : liveTail;
+
+  async function handleStart() {
+    if (!experiment) return;
+    setStarting(true);
+    try {
+      const res = await fetch(`/api/experiments/${experiment.id}/start`, { method: 'POST' });
+      if (!res.ok) throw new Error(await res.text());
+      // status atualiza via WS EXPERIMENT_STARTED; nada mais a fazer
+    } catch (err) {
+      console.error('❌ Erro ao iniciar experimento:', err);
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  async function handleSavePanel() {
+    if (!experiment || !activeSlave) return;
+    setSavingPanel(true);
+    try {
+      const res = await fetch(`/api/experiments/${experiment.id}/slaves/${activeSlave}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildConfigPayload(panelConfig)),
+      });
+      if (!res.ok) throw new Error(await res.text());
+    } catch (err) {
+      console.error('❌ Erro ao salvar config (tempo real):', err);
+    } finally {
+      setSavingPanel(false);
+    }
+  }
 
   function handleResolve(alertId: string) {
     if (confirmingId === alertId) {
@@ -134,7 +242,19 @@ export default function Experiment() {
               </p>
             </div>
           </div>
-          <StatusBadge status={experiment.status} />
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {experiment.status === 'draft' && (
+              <button
+                onClick={handleStart}
+                disabled={starting}
+                className="ev-btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Play size={15} />
+                {starting ? 'Iniciando...' : 'Iniciar Experimento'}
+              </button>
+            )}
+            <StatusBadge status={experiment.status} />
+          </div>
         </div>
 
         <div className="grid grid-cols-4 gap-6 mt-5 pt-4" style={{ borderTop: '1px solid var(--ev-border-subtle)' }}>
@@ -485,10 +605,82 @@ export default function Experiment() {
               ))}
             </div>
           </div>
+
+          {/* Painel expansível: Configuração de variáveis (edição em tempo real) */}
+          <div className="ev-card overflow-hidden">
+            <button
+              onClick={() => setShowConfigPanel(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-3"
+              style={{ borderBottom: showConfigPanel ? '1px solid var(--ev-border-subtle)' : 'none' }}
+            >
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal size={14} style={{ color: 'var(--ev-green-primary)' }} />
+                <h3 className="font-semibold text-sm" style={{ fontFamily: 'Space Grotesk, monospace', color: 'var(--ev-text-primary)' }}>
+                  Configuração de variáveis
+                </h3>
+              </div>
+              {showConfigPanel ? <ChevronUp size={14} style={{ color: 'var(--ev-text-muted)' }} /> : <ChevronDown size={14} style={{ color: 'var(--ev-text-muted)' }} />}
+            </button>
+
+            {showConfigPanel && (
+              <div className="p-4 space-y-3">
+                {expSlaves.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="ev-label mr-1">Slave:</span>
+                    {expSlaves.map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => setActiveSlave(s.id)}
+                        className="text-xs px-2.5 py-1 rounded transition-all duration-200"
+                        style={{
+                          backgroundColor: activeSlave === s.id ? 'var(--ev-green-dim)' : 'var(--ev-bg-card)',
+                          border: `1px solid ${activeSlave === s.id ? 'var(--ev-green-muted)' : 'var(--ev-border-subtle)'}`,
+                          color: activeSlave === s.id ? 'var(--ev-green-primary)' : 'var(--ev-text-secondary)',
+                          fontFamily: 'IBM Plex Mono, monospace',
+                        }}
+                      >
+                        {s.hostname}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <SlaveConfigForm
+                  value={panelConfig}
+                  onChange={setPanelConfig}
+                  onSave={handleSavePanel}
+                  saving={savingPanel}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </DashboardLayout>
   );
+}
+
+// Converte uma linha (snake_case) do GET /alerts no shape Alert do frontend
+function mapApiAlert(row: any): Alert {
+  return {
+    id: row.id,
+    slaveId: row.slave_id,
+    slaveName: row.hostname || row.slave_id || '',
+    experimentId: row.experiment_id ?? null,
+    sensor: row.sensor as SensorType,
+    severity: row.severity as AlertSeverity,
+    message: row.message,
+    value: Number(row.value),
+    threshold: Number(row.threshold),
+    timestamp: row.timestamp,
+    resolved: !!row.resolved,
+    resolvedAt: row.resolved_at ?? null,
+  };
+}
+
+// Mescla alertas persistidos (backend) com os client-side, sem duplicar por id
+function mergeAlerts(apiAlerts: Alert[], liveAlerts: Alert[]): Alert[] {
+  const seen = new Set(apiAlerts.map(a => a.id));
+  return [...apiAlerts, ...liveAlerts.filter(a => !seen.has(a.id))];
 }
 
 function MetaItem({ label, value }: { label: string; value: string }) {

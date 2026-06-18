@@ -241,6 +241,17 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
             setExperiments((prev) => prev.filter((e) => e.id !== id));
           }
 
+          if (message.type === "EXPERIMENT_STARTED") {
+            const { id, status, startedAt } = message.data;
+            setExperiments((prev) =>
+              prev.map((e) =>
+                e.id === id
+                  ? { ...e, status: (status || "running") as Experiment["status"], startedAt: startedAt ?? e.startedAt }
+                  : e
+              )
+            );
+          }
+
           if (message.type === "SLAVE_HELLO") {
             const { id, hostname, ip, timestamp } = message.data;
             setSlaves((prev) => {
