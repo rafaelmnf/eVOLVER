@@ -252,6 +252,16 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
             );
           }
 
+          // Mudança de status do experimento (pausado/retomado) em tempo real.
+          if (message.type === "EXPERIMENT_STATUS") {
+            const { id, status } = message.data;
+            setExperiments((prev) =>
+              prev.map((e) =>
+                e.id === id ? { ...e, status: status as Experiment["status"] } : e
+              )
+            );
+          }
+
           if (message.type === "SLAVE_HELLO") {
             const { id, hostname, ip, timestamp } = message.data;
             setSlaves((prev) => {
@@ -288,6 +298,8 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
 
           if (message.type === "MQTT_READING") {
             const { origem, temp, densidade, rotacao, timestamp, id, status, experimentId } = message.data;
+            // Instante real desta leitura (epoch ms) — usado para o eixo X cronológico.
+            const readingTs = timestamp ? new Date(timestamp).getTime() : Date.now();
 
             let isWarning = false;
             let warningMsg = "";
@@ -326,7 +338,8 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                     trend: "stable",
                     trendDelta: 0,
                     quality: isWarning ? "poor" : "excellent",
-                    history: [temp]
+                    history: [temp],
+                    historyTs: [readingTs]
                   },
                   od: {
                     value: densidade,
@@ -334,7 +347,8 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                     trend: "stable",
                     trendDelta: 0,
                     quality: "excellent",
-                    history: [densidade]
+                    history: [densidade],
+                    historyTs: [readingTs]
                   },
                   agitation: {
                     value: rotacao ?? 200,
@@ -342,7 +356,8 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                     trend: "stable",
                     trendDelta: 0,
                     quality: "excellent",
-                    history: [rotacao ?? 200]
+                    history: [rotacao ?? 200],
+                    historyTs: [readingTs]
                   }
                 }
               };
@@ -388,11 +403,13 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                 // Se o experimentId mudou (slave acabou de entrar num experimento), limpa o histórico
                 const experimentChanged = experimentId !== undefined && experimentId !== slave.experimentId && experimentId !== null;
 
-                // Update Temperature
+                // Update Temperature (mantém history e historyTs espelhados)
                 const tempHistory = experimentChanged ? [] : [...(slave.sensors.temperature.history || [])];
+                const tempHistoryTs = experimentChanged ? [] : [...(slave.sensors.temperature.historyTs || [])];
                 const prevTemp = tempHistory[tempHistory.length - 1] ?? temp;
                 tempHistory.push(temp);
-                if (tempHistory.length > 20) tempHistory.shift();
+                tempHistoryTs.push(readingTs);
+                if (tempHistory.length > 20) { tempHistory.shift(); tempHistoryTs.shift(); }
 
                 slave.sensors = {
                   ...slave.sensors,
@@ -400,6 +417,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                     ...slave.sensors.temperature,
                     value: temp,
                     history: tempHistory,
+                    historyTs: tempHistoryTs,
                     trend: temp > prevTemp ? "up" : temp < prevTemp ? "down" : "stable",
                     trendDelta: parseFloat((temp - prevTemp).toFixed(2)),
                     quality: isWarning ? "poor" : "excellent"
@@ -408,14 +426,17 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
 
                 // Update OD
                 const odHistory = experimentChanged ? [] : [...(slave.sensors.od.history || [])];
+                const odHistoryTs = experimentChanged ? [] : [...(slave.sensors.od.historyTs || [])];
                 const prevOD = odHistory[odHistory.length - 1] ?? densidade;
                 odHistory.push(densidade);
-                if (odHistory.length > 20) odHistory.shift();
+                odHistoryTs.push(readingTs);
+                if (odHistory.length > 20) { odHistory.shift(); odHistoryTs.shift(); }
 
                 slave.sensors.od = {
                   ...slave.sensors.od,
                   value: densidade,
                   history: odHistory,
+                  historyTs: odHistoryTs,
                   trend: densidade > prevOD ? "up" : densidade < prevOD ? "down" : "stable",
                   trendDelta: parseFloat((densidade - prevOD).toFixed(3)),
                   quality: "excellent"
@@ -424,13 +445,16 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
                 // Update Agitation (rotacao)
                 if (rotacao !== undefined) {
                   const rpmHistory = experimentChanged ? [] : [...(slave.sensors.agitation.history || [])];
+                  const rpmHistoryTs = experimentChanged ? [] : [...(slave.sensors.agitation.historyTs || [])];
                   const prevRpm = rpmHistory[rpmHistory.length - 1] ?? rotacao;
                   rpmHistory.push(rotacao);
-                  if (rpmHistory.length > 20) rpmHistory.shift();
+                  rpmHistoryTs.push(readingTs);
+                  if (rpmHistory.length > 20) { rpmHistory.shift(); rpmHistoryTs.shift(); }
                   slave.sensors.agitation = {
                     ...slave.sensors.agitation,
                     value: rotacao,
                     history: rpmHistory,
+                    historyTs: rpmHistoryTs,
                     trend: rotacao > prevRpm ? "up" : rotacao < prevRpm ? "down" : "stable",
                     trendDelta: parseFloat((rotacao - prevRpm).toFixed(1)),
                     quality: "excellent"

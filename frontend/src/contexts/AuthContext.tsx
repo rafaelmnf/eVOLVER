@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState } from "react";
 
 interface User {
   id: string;
@@ -26,18 +26,22 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [user, setUser] = useState<User | null>(null);
+// Lê o usuário salvo no localStorage de forma síncrona (antes do 1º render).
+// Evita o flash de redirect para /login ao dar refresh com sessão válida.
+function readStoredUser(): User | null {
+  try {
+    const stored = localStorage.getItem("evolver_user");
+    return stored ? (JSON.parse(stored) as User) : null;
+  } catch {
+    return null;
+  }
+}
 
-  // Hidrata o estado a partir do localStorage no primeiro carregamento
-  useEffect(() => {
-    const storedUser = localStorage.getItem("evolver_user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-      setIsAuthenticated(true);
-    }
-  }, []);
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // Inicialização lazy: o estado já nasce hidratado a partir do localStorage,
+  // então o ProtectedRoute não redireciona indevidamente no refresh.
+  const [user, setUser] = useState<User | null>(() => readStoredUser());
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => readStoredUser() !== null);
 
   const persist = (u: User) => {
     setUser(u);

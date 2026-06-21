@@ -19,6 +19,69 @@ const CATEGORY_TO_FIELD: Record<string, string> = {
   rpm: "rotacao",
 };
 
+// Ativa as slaves de um experimento: carrega config + intervalo de cada slave,
+// publica o comando MQTT `iniciar_experimento` e faz broadcast do status.
+// Reutilizado por POST /start e POST /resume.
+async function startSlavesForExperiment(
+  experimentId: string,
+  deps: RouteDeps
+): Promise<number> {
+  const { wsService, mqttService } = deps;
+
+  // Intervalo de envio é definido por experimento (mesmo valor para todas as slaves).
+  const intervalResult = await query(
+    `SELECT data_send_interval FROM experiments WHERE id = $1`,
+    [experimentId]
+  );
+  const intervalo = intervalResult.rows[0]?.data_send_interval ?? 20;
+
+  const slavesResult = await query(
+    `UPDATE slaves SET status = 'active' WHERE experiment_id = $1
+     RETURNING id, hostname`,
+    [experimentId]
+  );
+
+  for (const slave of slavesResult.rows) {
+    const cfgResult = await query(
+      `SELECT sensor, target_value, min_limit, max_limit, feed_pump_time, waste_pump_time
+       FROM slave_sensor_configs
+       WHERE slave_id = $1`,
+      [slave.id]
+    );
+
+    const configBySensor: Record<string, any> = {};
+    for (const row of cfgResult.rows) {
+      configBySensor[row.sensor] = {
+        targetValue: row.target_value,
+        minLimit: row.min_limit,
+        maxLimit: row.max_limit,
+        feedPumpTime: row.feed_pump_time,
+        wastePumpTime: row.waste_pump_time,
+      };
+    }
+
+    mqttService.publish(`projeto/comandos/${slave.hostname}`, {
+      comando: "iniciar_experimento",
+      experimentId,
+      // Intervalo de envio (segundos) respeitado pela Pico no loop principal.
+      intervalo,
+      config: configBySensor,
+    });
+
+    wsService.broadcast({
+      type: "SLAVE_STATUS_UPDATE",
+      data: {
+        id: slave.id,
+        hostname: slave.hostname,
+        status: "active",
+        lastSeen: new Date().toISOString(),
+      },
+    });
+  }
+
+  return slavesResult.rows.length;
+}
+
 export function registerExperimentRoutes(app: Express, deps: RouteDeps) {
   const { wsService, mqttService } = deps;
 
@@ -28,7 +91,11 @@ export function registerExperimentRoutes(app: Express, deps: RouteDeps) {
       const result = await query(
         `SELECT e.id, e.researcher_id, e.name, e.description, e.status,
                 e.started_at, e.created_at, e.updated_at,
-                u.name AS researcher_name, u.email AS researcher_email
+                u.name AS researcher_name, u.email AS researcher_email,
+                COALESCE(
+                  (SELECT array_agg(s.id) FROM slaves s WHERE s.experiment_id = e.id),
+                  '{}'
+                ) AS slave_ids
          FROM experiments e
          LEFT JOIN users u ON u.id = e.researcher_id
          ORDER BY e.created_at DESC`
@@ -43,6 +110,7 @@ export function registerExperimentRoutes(app: Express, deps: RouteDeps) {
         startedAt: row.started_at ? row.started_at.toISOString() : null,
         createdAt: row.created_at ? row.created_at.toISOString() : null,
         updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
+        slaveIds: row.slave_ids || [],
         researcher: {
           id: row.researcher_id || "",
           name: row.researcher_name || "Pesquisador",
@@ -60,7 +128,7 @@ export function registerExperimentRoutes(app: Express, deps: RouteDeps) {
   // --- POST /api/experiments : cria experimento inicial em 'draft' ---
   app.post("/api/experiments", requireResearcher, async (req, res) => {
     try {
-      const { name, description, slaveIds } = req.body;
+      const { name, description, slaveIds, dataSendInterval } = req.body;
       const researcher = req.researcher!; // garantido pelo requireResearcher
 
       if (!name) {
@@ -68,11 +136,18 @@ export function registerExperimentRoutes(app: Express, deps: RouteDeps) {
         return;
       }
 
+      // Intervalo de envio do experimento (segundos). Validação estrita 20–200.
+      const interval = Number(dataSendInterval);
+      if (!Number.isFinite(interval) || interval < 20 || interval > 200) {
+        res.status(400).json({ error: "dataSendInterval deve estar entre 20 e 200 segundos." });
+        return;
+      }
+
       const expResult = await query(
-        `INSERT INTO experiments (researcher_id, name, description, status)
-         VALUES ($1, $2, $3, 'draft')
+        `INSERT INTO experiments (researcher_id, name, description, status, data_send_interval)
+         VALUES ($1, $2, $3, 'draft', $4)
          RETURNING id, researcher_id, name, description, status, started_at, created_at, updated_at`,
-        [researcher.id, name, description || ""]
+        [researcher.id, name, description || "", interval]
       );
       const experiment = expResult.rows[0];
 
@@ -234,49 +309,8 @@ export function registerExperimentRoutes(app: Express, deps: RouteDeps) {
       }
       const experiment = expResult.rows[0];
 
-      // Ativa as slaves vinculadas
-      const slavesResult = await query(
-        `UPDATE slaves SET status = 'active' WHERE experiment_id = $1
-         RETURNING id, hostname`,
-        [id]
-      );
-
-      // Para cada slave, carrega suas configs e publica o comando MQTT
-      for (const slave of slavesResult.rows) {
-        const cfgResult = await query(
-          `SELECT sensor, target_value, min_limit, max_limit, feed_pump_time, waste_pump_time
-           FROM slave_sensor_configs
-           WHERE slave_id = $1`,
-          [slave.id]
-        );
-
-        const configBySensor: Record<string, any> = {};
-        for (const row of cfgResult.rows) {
-          configBySensor[row.sensor] = {
-            targetValue: row.target_value,
-            minLimit: row.min_limit,
-            maxLimit: row.max_limit,
-            feedPumpTime: row.feed_pump_time,
-            wastePumpTime: row.waste_pump_time,
-          };
-        }
-
-        mqttService.publish(`projeto/comandos/${slave.hostname}`, {
-          comando: "iniciar_experimento",
-          experimentId: id,
-          config: configBySensor,
-        });
-
-        wsService.broadcast({
-          type: "SLAVE_STATUS_UPDATE",
-          data: {
-            id: slave.id,
-            hostname: slave.hostname,
-            status: "active",
-            lastSeen: new Date().toISOString(),
-          },
-        });
-      }
+      // Ativa as slaves vinculadas (config + intervalo + comando MQTT + broadcast)
+      const activated = await startSlavesForExperiment(id, deps);
 
       wsService.broadcast({
         type: "EXPERIMENT_STARTED",
@@ -288,12 +322,92 @@ export function registerExperimentRoutes(app: Express, deps: RouteDeps) {
       });
 
       console.log(
-        `🚀 [API] Experimento ${id} iniciado. ${slavesResult.rows.length} slave(s) ativada(s).`
+        `🚀 [API] Experimento ${id} iniciado. ${activated} slave(s) ativada(s).`
       );
       res.json({ ok: true, id, status: experiment.status });
     } catch (error) {
       console.error("❌ [API] Erro ao iniciar experimento:", error);
       res.status(500).json({ error: "Erro interno ao iniciar experimento." });
+    }
+  });
+
+  // --- POST /api/experiments/:id/pause : running -> paused (slaves param de publicar) ---
+  app.post("/api/experiments/:id/pause", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const expResult = await query(
+        `UPDATE experiments SET status = 'paused'
+         WHERE id = $1 AND status = 'running'
+         RETURNING id, status`,
+        [id]
+      );
+
+      if (expResult.rows.length === 0) {
+        res.status(409).json({ error: "Experimento não está em execução." });
+        return;
+      }
+
+      // Mantém o vínculo experiment_id (para retomar), apenas marca como idle e pausa a Pico.
+      const slavesResult = await query(
+        `UPDATE slaves SET status = 'idle' WHERE experiment_id = $1
+         RETURNING id, hostname`,
+        [id]
+      );
+
+      for (const slave of slavesResult.rows) {
+        mqttService.publish(`projeto/comandos/${slave.hostname}`, {
+          comando: "pausar_experimento",
+        });
+
+        wsService.broadcast({
+          type: "SLAVE_STATUS_UPDATE",
+          data: {
+            id: slave.id,
+            hostname: slave.hostname,
+            status: "idle",
+            lastSeen: new Date().toISOString(),
+          },
+        });
+      }
+
+      wsService.broadcast({ type: "EXPERIMENT_STATUS", data: { id, status: "paused" } });
+
+      console.log(`⏸️ [API] Experimento ${id} pausado. ${slavesResult.rows.length} slave(s).`);
+      res.json({ ok: true, id, status: "paused" });
+    } catch (error) {
+      console.error("❌ [API] Erro ao pausar experimento:", error);
+      res.status(500).json({ error: "Erro interno ao pausar experimento." });
+    }
+  });
+
+  // --- POST /api/experiments/:id/resume : paused -> running (reenvia iniciar) ---
+  app.post("/api/experiments/:id/resume", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const expResult = await query(
+        `UPDATE experiments SET status = 'running'
+         WHERE id = $1 AND status = 'paused'
+         RETURNING id, status`,
+        [id]
+      );
+
+      if (expResult.rows.length === 0) {
+        res.status(409).json({ error: "Experimento não está pausado." });
+        return;
+      }
+
+      // Reativa as slaves (mesma rotina do /start: config + intervalo + comando MQTT)
+      const activated = await startSlavesForExperiment(id, deps);
+
+      wsService.broadcast({ type: "EXPERIMENT_STATUS", data: { id, status: "running" } });
+
+      console.log(`▶️ [API] Experimento ${id} retomado. ${activated} slave(s) ativada(s).`);
+      res.json({ ok: true, id, status: "running" });
+    } catch (error) {
+      console.error("❌ [API] Erro ao retomar experimento:", error);
+      res.status(500).json({ error: "Erro interno ao retomar experimento." });
     }
   });
 

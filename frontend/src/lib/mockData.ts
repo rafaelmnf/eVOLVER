@@ -13,6 +13,9 @@ export interface SensorReading {
   trendDelta: number;
   quality: 'excellent' | 'good' | 'poor' | 'error';
   history: number[];
+  // Timestamps (epoch ms) espelhados a cada ponto de `history`. Usado para plotar
+  // o eixo X com o horário real de cada leitura ao vivo (gráfico cronológico).
+  historyTs?: number[];
 }
 
 export interface RaspberrySlave {

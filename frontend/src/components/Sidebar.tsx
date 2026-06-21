@@ -8,9 +8,6 @@ import { Link, useLocation } from 'wouter';
 import {
   Activity,
   FlaskConical,
-  Cpu,
-  Bell,
-  Settings,
   ChevronRight,
   Wifi,
   WifiOff,
@@ -22,20 +19,16 @@ import { useAuth } from '@/contexts/AuthContext';
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: Activity },
   { path: '/experimentos', label: 'Experiments', icon: FlaskConical },
-  { path: '/dispositivos', label: 'Devices', icon: Cpu },
-  { path: '/alertas', label: 'Alerts', icon: Bell },
-  { path: '/configuracoes', label: 'Settings', icon: Settings },
 ];
 
 export default function Sidebar() {
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
-  const { slaves, alerts, master, isConnected } = useLiveData();
+  const { slaves, master, isConnected } = useLiveData();
   const isMasterOnline = isConnected && master.status === 'active';
 
   const activeSlaves = slaves.filter(s => s.status === 'active').length;
   const offlineSlaves = slaves.filter(s => s.status === 'offline').length;
-  const unresolvedAlerts = alerts.filter(a => !a.resolved).length;
 
   const handleLogout = () => {
     logout();
@@ -105,7 +98,6 @@ export default function Sidebar() {
         <ul className="space-y-1">
           {navItems.map(({ path, label, icon: Icon }) => {
             const isActive = location === path || (path === '/experimentos' && location.startsWith('/experimento')) || (path !== '/dashboard' && location.startsWith(path));
-            const isAlerts = path === '/alertas';
             return (
               <li key={path}>
                 <Link href={path}>
@@ -133,14 +125,6 @@ export default function Sidebar() {
                   >
                     <Icon size={16} />
                     <span className="flex-1">{label}</span>
-                    {isAlerts && unresolvedAlerts > 0 && (
-                      <span
-                        className="text-xs px-1.5 py-0.5 rounded-full font-mono font-bold"
-                        style={{ backgroundColor: '#3d0a0a', color: '#e74c3c', fontSize: '0.65rem' }}
-                      >
-                        {unresolvedAlerts}
-                      </span>
-                    )}
                     {isActive && <ChevronRight size={12} style={{ opacity: 0.5 }} />}
                   </div>
                 </Link>

@@ -4,8 +4,7 @@
  * Active slaves have green glow; offline are dimmed
  */
 
-import { Link } from 'wouter';
-import { Wifi, WifiOff, AlertTriangle, ChevronRight, Clock, CircleDashed } from 'lucide-react';
+import { Wifi, WifiOff, AlertTriangle, Clock, CircleDashed } from 'lucide-react';
 import { RaspberrySlave, formatRelativeTime } from '@/lib/mockData';
 import SensorCard from './SensorCard';
 
@@ -132,17 +131,6 @@ export default function SlaveCard({ slave, index }: SlaveCardProps) {
             </>
           )}
         </div>
-        <Link href={`/dispositivos`}>
-          <button
-            className="flex items-center gap-1 text-xs transition-colors duration-200"
-            style={{ color: 'var(--ev-text-muted)' }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--ev-green-primary)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--ev-text-muted)')}
-          >
-            Details
-            <ChevronRight size={11} />
-          </button>
-        </Link>
       </div>
     </div>
   );

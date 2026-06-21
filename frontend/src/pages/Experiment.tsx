@@ -45,6 +45,7 @@ import {
   ChevronDown,
   ChevronUp,
   Play,
+  Pause,
   SlidersHorizontal,
 } from 'lucide-react';
 
@@ -57,7 +58,13 @@ const TAB_TO_CATEGORY: Record<SensorTab, 'tp' | 'do' | 'rpm'> = {
   agitation: 'rpm',
 };
 
-interface ChartPoint { time: string; value: number; }
+// ts = instante real (epoch ms) usado para ordenar/deduplicar; time = rótulo HH:mm do eixo X.
+interface ChartPoint { ts: number; time: string; value: number; }
+
+// Formata um epoch (ms) no rótulo HH:mm exibido no eixo X.
+function fmtTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
 
 const sensorConfig: Record<SensorTab, { label: string; unit: string; color: string; refMin?: number; refMax?: number }> = {
   temperature: { label: 'Temperature', unit: '°C', color: '#1db954', refMin: 36, refMax: 38.5 },
@@ -84,8 +91,8 @@ export default function Experiment() {
   // --- Alertas persistidos (GET) mesclados com os client-side (useLiveData) ---
   const [apiAlerts, setApiAlerts] = useState<Alert[]>([]);
 
-  // --- Iniciar experimento (draft -> running) ---
-  const [starting, setStarting] = useState(false);
+  // --- Controle do experimento (iniciar / pausar / retomar) ---
+  const [busy, setBusy] = useState(false);
 
   // --- Painel "Configuração de variáveis" (reuso do SlaveConfigForm) ---
   const [showConfigPanel, setShowConfigPanel] = useState(false);
@@ -107,10 +114,10 @@ export default function Experiment() {
       .then(data => {
         if (cancelled) return;
         const series = (data.series || []).find((s: any) => s.slaveId === activeSlave) || (data.series || [])[0];
-        const points: ChartPoint[] = (series?.points || []).map((p: any) => ({
-          time: new Date(p.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-          value: p.value,
-        }));
+        const points: ChartPoint[] = (series?.points || []).map((p: any) => {
+          const ts = new Date(p.timestamp).getTime();
+          return { ts, time: fmtTime(ts), value: p.value };
+        });
         setApiChart(points);
       })
       .catch(() => { if (!cancelled) setApiChart([]); });
@@ -163,25 +170,29 @@ export default function Experiment() {
   // estender a curva do backend com os pontos mais recentes recebidos via MQTT.
   const liveSensor = activeSlave ? slaves.find(s => s.id === activeSlave)?.sensors[activeTab] : null;
   const liveTail: ChartPoint[] = liveSensor
-    ? liveSensor.history.map((v, i) => ({
-        time: new Date(Date.now() - (liveSensor.history.length - 1 - i) * 60000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-        value: v,
-      }))
+    ? liveSensor.history.map((v, i) => {
+        // Usa o timestamp real da leitura quando disponível; senão, estima a partir
+        // do índice (fallback p/ mocks antigos sem historyTs).
+        const ts = liveSensor.historyTs?.[i] ?? (Date.now() - (liveSensor.history.length - 1 - i) * 60000);
+        return { ts, time: fmtTime(ts), value: v };
+      })
     : [];
-  // Merge: base do backend + cauda ao vivo (quando há base) ou só a cauda ao vivo.
-  const chartData: ChartPoint[] = apiChart.length > 0 ? [...apiChart, ...liveTail] : liveTail;
+  // Merge backend + cauda ao vivo, ordena cronologicamente e remove timestamps
+  // duplicados (sobreposição entre o fim do histórico do backend e o início do live).
+  const chartData: ChartPoint[] = dedupByTs([...apiChart, ...liveTail].sort((a, b) => a.ts - b.ts));
 
-  async function handleStart() {
+  // Dispara start/pause/resume. O status visual atualiza via WebSocket
+  // (EXPERIMENT_STARTED / EXPERIMENT_STATUS), então aqui só fazemos o POST.
+  async function handleControl(action: 'start' | 'pause' | 'resume') {
     if (!experiment) return;
-    setStarting(true);
+    setBusy(true);
     try {
-      const res = await fetch(`/api/experiments/${experiment.id}/start`, { method: 'POST' });
+      const res = await fetch(`/api/experiments/${experiment.id}/${action}`, { method: 'POST' });
       if (!res.ok) throw new Error(await res.text());
-      // status atualiza via WS EXPERIMENT_STARTED; nada mais a fazer
     } catch (err) {
-      console.error('❌ Erro ao iniciar experimento:', err);
+      console.error(`❌ Erro ao ${action} experimento:`, err);
     } finally {
-      setStarting(false);
+      setBusy(false);
     }
   }
 
@@ -212,7 +223,6 @@ export default function Experiment() {
   }
 
   const activeAlerts = expAlerts.filter(a => !a.resolved);
-  const unresolvedAlertsCount = activeAlerts.length;
   const resolvedAlertsList = expAlerts.filter(a => a.resolved);
 
   return (
@@ -243,14 +253,35 @@ export default function Experiment() {
             </div>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
+            {/* Switch de controle: Iniciar (draft) ↔ Pausar (running) ↔ Retomar (paused) */}
             {experiment.status === 'draft' && (
               <button
-                onClick={handleStart}
-                disabled={starting}
+                onClick={() => handleControl('start')}
+                disabled={busy}
                 className="ev-btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Play size={15} />
-                {starting ? 'Iniciando...' : 'Iniciar Experimento'}
+                {busy ? 'Iniciando...' : 'Iniciar Experimento'}
+              </button>
+            )}
+            {experiment.status === 'running' && (
+              <button
+                onClick={() => handleControl('pause')}
+                disabled={busy}
+                className="ev-btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Pause size={15} />
+                {busy ? 'Pausando...' : 'Pausar Experimento'}
+              </button>
+            )}
+            {experiment.status === 'paused' && (
+              <button
+                onClick={() => handleControl('resume')}
+                disabled={busy}
+                className="ev-btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Play size={15} />
+                {busy ? 'Retomando...' : 'Retomar Experimento'}
               </button>
             )}
             <StatusBadge status={experiment.status} />
@@ -357,7 +388,8 @@ export default function Experiment() {
                       tick={{ fill: 'var(--ev-text-muted)', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }}
                       tickLine={false}
                       axisLine={{ stroke: 'var(--ev-border-subtle)' }}
-                      interval={11}
+                      interval="preserveStartEnd"
+                      minTickGap={28}
                     />
                     <YAxis
                       tick={{ fill: 'var(--ev-text-muted)', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }}
@@ -657,6 +689,17 @@ export default function Experiment() {
       </div>
     </DashboardLayout>
   );
+}
+
+// Remove pontos com timestamp repetido de uma lista JÁ ordenada por ts ascendente.
+function dedupByTs(points: ChartPoint[]): ChartPoint[] {
+  const out: ChartPoint[] = [];
+  let lastTs = NaN;
+  for (const p of points) {
+    if (p.ts === lastTs) out[out.length - 1] = p; // mantém o mais recente do mesmo instante
+    else { out.push(p); lastTs = p.ts; }
+  }
+  return out;
 }
 
 // Converte uma linha (snake_case) do GET /alerts no shape Alert do frontend

@@ -28,6 +28,12 @@ sensor_rotacao   = machine.ADC(28)
 # Estado local: None = ocioso, string = id do experimento em curso
 experimento_ativo = None
 
+# Intervalo de envio de dados (segundos). Default 5 (legado); o backend envia um
+# valor entre 20 e 200 no comando 'iniciar_experimento'.
+intervalo_envio = 5
+INTERVALO_MIN = 20
+INTERVALO_MAX = 200
+
 # --- 1. CONECTANDO AO WI-FI ---
 def conectar_wifi():
     wlan = network.WLAN(network.STA_IF)
@@ -55,16 +61,27 @@ def tentar_conectar_mqtt():
 
 # --- 3. CALLBACK: recebe comandos da master (ex.: vincular a experimento) ---
 def callback_comandos(topico, mensagem):
-    global experimento_ativo
+    global experimento_ativo, intervalo_envio
     try:
         # DECODIFICA de bytes para texto antes de ler o JSON
-        mensagem_texto = mensagem.decode('utf-8') 
+        mensagem_texto = mensagem.decode('utf-8')
         dados = json.loads(mensagem_texto)
-        
+
         comando = dados.get("comando")
         if comando == "iniciar_experimento":
             experimento_ativo = dados.get("experimentId")
-            print(f"🔬 Experimento iniciado: {experimento_ativo}")
+            # Aplica o intervalo de envio configurado, com clamp defensivo 20–200s.
+            try:
+                novo = int(dados.get("intervalo", intervalo_envio))
+                intervalo_envio = max(INTERVALO_MIN, min(INTERVALO_MAX, novo))
+            except (TypeError, ValueError):
+                pass
+            print(f"🔬 Experimento iniciado: {experimento_ativo} (envio a cada {intervalo_envio}s)")
+        elif comando == "pausar_experimento":
+            # Pausa: para de publicar sensores e volta a anunciar presença (HELLO).
+            # O backend mantém o vínculo no DB; 'iniciar_experimento' (resume/reconexão) retoma.
+            print(f"⏸️ Experimento pausado: {experimento_ativo}")
+            experimento_ativo = None
         elif comando == "parar_experimento":
             print(f"🛑 Experimento encerrado: {experimento_ativo}")
             experimento_ativo = None
@@ -129,20 +146,23 @@ if conectado_mqtt:
     anunciar_presenca()
 
 # --- 6. LOOP PRINCIPAL ---
+# O loop "tica" a cada TICK_S segundos só para checar comandos (check_msg) e manter
+# a Pico responsiva. A publicação de sensores/HELLO é controlada por tempo decorrido,
+# respeitando o intervalo configurado. Assim, pausar/iniciar tem efeito em ~1s mesmo
+# com intervalo de envio alto (20–200s) — antes a Pico ficava presa no sleep longo.
+TICK_S = 1
+ultimo_envio = time.ticks_ms()
+
+# Últimas leituras (inicializadas para o buffer offline funcionar antes do 1º envio)
+temperatura_real = 0.0
+densidade_real = 0.0
+rotacao_real = 0.0
+
 while True:
     try:
-        # Verifica se chegou algum comando da master (não-bloqueante)
+        # Verifica se chegou algum comando da master (não-bloqueante) — a cada tick
         if conectado_mqtt:
             cliente_mqtt.check_msg()
-
-        # Leituras dos sensores (sempre acontecem, mesmo em idle)
-        leitura_t = sensor_temp.read_u16()
-        leitura_d = sensor_densidade.read_u16()
-        leitura_r = sensor_rotacao.read_u16()
-
-        temperatura_real = round((leitura_t / 65535.0) * 100, 2)
-        densidade_real   = round((leitura_d / 65535.0) * 5, 2)
-        rotacao_real     = round((leitura_r / 65535.0) * 300, 1)  # 0–300 RPM mock
 
         # Tenta reconectar se necessário
         if not conectado_mqtt:
@@ -152,40 +172,51 @@ while True:
                 cliente_mqtt.set_callback(callback_comandos)
                 cliente_mqtt.subscribe(TOPICO_COMANDOS.encode('utf-8'))
                 anunciar_presenca()
+                enviar_buffer_acumulado()
+                ultimo_envio = time.ticks_ms()
 
-        if conectado_mqtt:
-            enviar_buffer_acumulado()
+        # Só publica/anuncia quando o intervalo configurado tiver decorrido
+        decorrido = time.ticks_diff(time.ticks_ms(), ultimo_envio) >= intervalo_envio * 1000
+        if decorrido:
+            ultimo_envio = time.ticks_ms()
 
-            # Só publica dados de sensor se estiver vinculado a um experimento
-            if experimento_ativo is None:
-                # Ociosa: renova o HELLO a cada ciclo para o servidor saber que ainda está viva
-                anunciar_presenca()
+            # Leituras dos sensores (sempre acontecem, mesmo em idle)
+            leitura_t = sensor_temp.read_u16()
+            leitura_d = sensor_densidade.read_u16()
+            leitura_r = sensor_rotacao.read_u16()
 
-            if experimento_ativo is not None:
-                dados = {
-                    "temp": temperatura_real,
-                    "densidade": densidade_real,
-                    "rotacao": rotacao_real,
-                    "experimentId": experimento_ativo
-                }
-                carga_json = json.dumps(dados)
-                cliente_mqtt.publish(TOPICO_SENSORES.encode('utf-8'), carga_json.encode('utf-8'), qos=1)
-                print(f"📤 Enviado: {carga_json}")
+            temperatura_real = round((leitura_t / 65535.0) * 100, 2)
+            densidade_real   = round((leitura_d / 65535.0) * 5, 2)
+            rotacao_real     = round((leitura_r / 65535.0) * 300, 1)  # 0–300 RPM mock
+
+            if conectado_mqtt:
+                # Ociosa/pausada: renova o HELLO para o servidor saber que ainda está viva
+                if experimento_ativo is None:
+                    anunciar_presenca()
+                    print(f"💤 Ocioso — aguardando experimento (temp={temperatura_real}°C)")
+                else:
+                    dados = {
+                        "temp": temperatura_real,
+                        "densidade": densidade_real,
+                        "rotacao": rotacao_real,
+                        "experimentId": experimento_ativo
+                    }
+                    carga_json = json.dumps(dados)
+                    cliente_mqtt.publish(TOPICO_SENSORES.encode('utf-8'), carga_json.encode('utf-8'), qos=1)
+                    print(f"📤 Enviado: {carga_json}")
             else:
-                print(f"💤 Ocioso — aguardando experimento (temp={temperatura_real}°C)")
-        else:
-            # Offline e em experimento: salva no buffer para não perder dados
-            if experimento_ativo is not None:
-                dados = {
-                    "temp": temperatura_real,
-                    "densidade": densidade_real,
-                    "rotacao": rotacao_real,
-                    "experimentId": experimento_ativo
-                }
-                salvar_no_buffer(json.dumps(dados))
-            print("⚠️ Sistema operando Offline.")
+                # Offline e em experimento: salva no buffer para não perder dados
+                if experimento_ativo is not None:
+                    dados = {
+                        "temp": temperatura_real,
+                        "densidade": densidade_real,
+                        "rotacao": rotacao_real,
+                        "experimentId": experimento_ativo
+                    }
+                    salvar_no_buffer(json.dumps(dados))
+                print("⚠️ Sistema operando Offline.")
 
-        time.sleep(5)
+        time.sleep(TICK_S)
 
     except OSError as e:
         print(f"⚠️ Alerta de Hardware: Conexão com o Broker perdida ({e})")

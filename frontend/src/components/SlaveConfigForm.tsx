@@ -244,7 +244,7 @@ function Section({ icon, label, hint, children }: { icon: React.ReactNode; label
   );
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function Field({ label, value, onChange, invalid }: { label: string; value: string; onChange: (v: string) => void; invalid?: boolean }) {
   return (
     <div>
       <label className="ev-label block mb-1">{label}</label>
@@ -254,6 +254,7 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full ev-input"
+        style={invalid ? { borderColor: 'var(--ev-danger)' } : undefined}
         placeholder="—"
       />
     </div>
